@@ -1,318 +1,151 @@
 import os
+import asyncio
 import httpx
-
-from dotenv import load_dotenv
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    WebAppInfo,
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
+    MessageHandler,
     ContextTypes,
+    filters,
 )
 
-load_dotenv()
-
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ADMIN_ID = int(os.getenv("ADMIN_TELEGRAM_ID", "0"))
+APP_URL = os.getenv("APP_URL", "").rstrip("/")
+BACKEND_URL = os.getenv("BACKEND_URL", "").rstrip("/")
 
-APP_URL = os.getenv("APP_URL", "").strip().rstrip("/")
-BACKEND_URL = os.getenv("BACKEND_URL", "").strip().rstrip("/")
-
-
-def normalize_url(url: str) -> str:
-    if not url:
-        return ""
-
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-
-    return url.rstrip("/")
-
-
-APP_URL = normalize_url(APP_URL)
-BACKEND_URL = normalize_url(BACKEND_URL)
+# Track admin's pending "which request am I assigning OTP to?"
+AWAITING_OTP_FOR: dict[int, int] = {}  # admin_chat_id -> request_id
 
 
 def is_admin(update: Update) -> bool:
-    user = update.effective_user
-
-    if not user:
-        return False
-
-    return user.id == ADMIN_ID
+    return update.effective_user and update.effective_user.id == ADMIN_ID
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-
     keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "Open ToonPay 🚀",
-                    web_app=WebAppInfo(url=APP_URL),
-                )
-            ]
-        ]
+        [[InlineKeyboardButton("Open ToonPay 🚀", web_app=WebAppInfo(url=APP_URL))]]
     )
-
     await update.message.reply_text(
         "👋 Welcome to ToonPay!\n\n"
-        "Tap the button below to open the ToonPay dashboard.",
+        "Tap the button below to open the ToonPay app and get started.",
         reply_markup=keyboard,
     )
 
 
-async def call_backend(
-    method: str,
-    endpoint: str,
-    *,
-    json_data=None,
-    params=None,
-):
-    url = f"{BACKEND_URL}{endpoint}"
-
-    headers = {
-        "x-admin-id": str(ADMIN_ID),
-    }
-
-    async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.request(
-            method,
-            url,
-            json=json_data,
-            params=params,
-            headers=headers,
-        )
-
-        response.raise_for_status()
-
-        if response.content:
-            return response.json()
-
-        return {}
-
-
-async def admin_callback(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-    query = update.callback_query
-
-    if not query:
-        return
-
+async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        await query.answer(
-            "Only the ToonPay admin can use this button.",
-            show_alert=True,
-        )
+        await update.message.reply_text("⛔ Not authorized.")
+        return
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{BACKEND_URL}/api/admin/pending")
+        data = r.json().get("requests", [])
+
+    if not data:
+        await update.message.reply_text("No pending requests.")
         return
 
+    lines = ["<b>Pending Requests</b>\n"]
+    buttons = []
+    for req in data[:20]:
+        lines.append(
+            f"#{req['id']} — <code>{req['identifier']}</code> — {req['status']}"
+        )
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"✏️ Assign #{req['id']}",
+                    callback_data=f"assign:{req['id']}",
+                )
+            ]
+        )
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
     await query.answer()
+    if not is_admin(update):
+        return
 
     data = query.data or ""
+    action, _, req_id_s = data.partition(":")
+    if not req_id_s.isdigit():
+        return
+    req_id = int(req_id_s)
 
-    try:
-        action, request_id_text = data.split(":", 1)
-        request_id = int(request_id_text)
-    except (ValueError, AttributeError):
+    if action == "assign":
+        AWAITING_OTP_FOR[query.message.chat_id] = req_id
         await query.message.reply_text(
-            "❌ Invalid request."
+            f"Send me the 6-digit OTP for request <code>#{req_id}</code>:",
+            parse_mode="HTML",
         )
         return
 
-    # ---------------------------------------------------------
-    # SET DEMO CODE
-    # ---------------------------------------------------------
-    if action == "setcode":
-        context.user_data["awaiting_demo_code_for"] = request_id
-
-        await query.message.reply_text(
-            f"🔐 Request #{request_id}\n\n"
-            "Set a synthetic 6-digit demo code for this test login.\n\n"
-            "Use:\n"
-            f"/setcode {request_id} 123456\n\n"
-            "Replace 123456 with the code you want to give the user."
-        )
-
+    if action == "approve":
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{BACKEND_URL}/api/admin/decision",
+                json={"request_id": req_id, "decision": "correct"},
+            )
+        await query.message.reply_text(f"✅ Approved request #{req_id}. User can log in.")
         return
 
-    # ---------------------------------------------------------
-    # REJECT REQUEST
-    # ---------------------------------------------------------
     if action == "reject":
-        try:
-            await call_backend(
-                "POST",
-                f"/internal/admin/reject/{request_id}",
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{BACKEND_URL}/api/admin/decision",
+                json={"request_id": req_id, "decision": "incorrect"},
             )
-
-            await query.message.reply_text(
-                f"❌ Demo login request #{request_id} rejected."
-            )
-
-        except Exception as exc:
-            await query.message.reply_text(
-                "❌ Could not reject the request.\n\n"
-                f"Error: {exc}"
-            )
-
+        await query.message.reply_text(f"❌ Rejected request #{req_id}.")
         return
 
 
-async def set_code(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-    if not update.message:
-        return
-
+async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        await update.message.reply_text(
-            "❌ Admin only."
-        )
+        return
+    chat_id = update.effective_chat.id
+    req_id = AWAITING_OTP_FOR.get(chat_id)
+    if not req_id:
         return
 
-    args = context.args
-
-    if len(args) != 2:
-        await update.message.reply_text(
-            "Usage:\n"
-            "/setcode REQUEST_ID 123456"
-        )
+    text = (update.message.text or "").strip()
+    if len(text) != 6 or not text.isdigit():
+        await update.message.reply_text("❌ Send exactly 6 digits.")
         return
 
-    try:
-        request_id = int(args[0])
-    except ValueError:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(
+            f"{BACKEND_URL}/api/admin/assign",
+            json={"request_id": req_id, "otp": text},
+        )
+    AWAITING_OTP_FOR.pop(chat_id, None)
+
+    if r.status_code == 200:
         await update.message.reply_text(
-            "❌ Request ID must be a number."
+            f"✅ OTP <code>{text}</code> saved for request #{req_id}.\n"
+            f"Now send this code to the user. When they type it, "
+            f"I'll notify you to approve.",
+            parse_mode="HTML",
         )
-        return
-
-    code = args[1].strip()
-
-    if len(code) != 6 or not code.isdigit():
-        await update.message.reply_text(
-            "❌ Demo code must contain exactly 6 digits."
-        )
-        return
-
-    try:
-        await call_backend(
-            "POST",
-            f"/internal/admin/set-demo-code/{request_id}",
-            params={
-                "code": code,
-            },
-        )
-
-        context.user_data.pop(
-            "awaiting_demo_code_for",
-            None,
-        )
-
-        await update.message.reply_text(
-            f"✅ Demo code configured for request #{request_id}.\n\n"
-            "Give this synthetic code to the user so they can continue "
-            "the test login."
-        )
-
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json().get(
-                "detail",
-                "Backend rejected the request.",
-            )
-        except Exception:
-            detail = "Backend rejected the request."
-
-        await update.message.reply_text(
-            f"❌ Could not configure demo code.\n\n{detail}"
-        )
-
-    except Exception as exc:
-        await update.message.reply_text(
-            "❌ Could not connect to the ToonPay backend.\n\n"
-            f"Error: {exc}"
-        )
-
-
-async def help_command(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-    if not update.message:
-        return
-
-    await update.message.reply_text(
-        "ToonPay Test Bot\n\n"
-        "/start - Open the test dashboard\n"
-        "/help - Show this help"
-    )
+    else:
+        await update.message.reply_text("⚠️ Failed to save OTP.")
 
 
 def main():
-    if not BOT_TOKEN:
-        raise RuntimeError(
-            "BOT_TOKEN is missing."
-        )
-
-    if not APP_URL:
-        raise RuntimeError(
-            "APP_URL is missing."
-        )
-
-    if not BACKEND_URL:
-        raise RuntimeError(
-            "BACKEND_URL is missing."
-        )
-
-    if not ADMIN_ID:
-        raise RuntimeError(
-            "ADMIN_TELEGRAM_ID is missing."
-        )
-
-    print("====================================")
-    print("ToonPay Telegram Test Bot")
-    print("====================================")
-    print(f"ADMIN_ID: {ADMIN_ID}")
-    print(f"APP_URL: {APP_URL}")
-    print(f"BACKEND_URL: {BACKEND_URL}")
-    print("Bot polling started...")
-
-    application = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .build()
-    )
-
-    application.add_handler(
-        CommandHandler("start", start)
-    )
-
-    application.add_handler(
-        CommandHandler("help", help_command)
-    )
-
-    application.add_handler(
-        CommandHandler("setcode", set_code)
-    )
-
-    application.add_handler(
-        CallbackQueryHandler(admin_callback)
-    )
-
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES
-    )
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("admin", admin_cmd))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    print("Bot is running...")
+    app.run_polling()
 
 
 if __name__ == "__main__":
