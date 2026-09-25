@@ -3,14 +3,13 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-
 html,
 body {
     margin: 0;
     padding: 0;
     width: 100%;
     min-height: 100%;
-    background: #000000;
+    background: #000;
     color: #f5f5f7;
     font-family:
         Inter,
@@ -23,18 +22,15 @@ body {
         sans-serif;
 }
 
-
 body {
     min-height: 100vh;
     overflow-x: hidden;
 }
 
-
 button,
 input {
     font-family: inherit;
 }
-
 
 button {
     border: 0;
@@ -42,12 +38,10 @@ button {
     cursor: pointer;
 }
 
-
 button:disabled {
-    opacity: 0.6;
+    opacity: .6;
     cursor: default;
 }
-
 
 .hidden {
     display: none !important;
@@ -55,47 +49,32 @@ button:disabled {
 
 
 /* =========================================================
-   MAIN
-   ========================================================= */
-
-#app {
-    width: 100%;
-    min-height: 100vh;
-    background: #000000;
-}
-
-
-/* =========================================================
-   LOGIN TOP BAR
+   TOP BAR
    ========================================================= */
 
 .top-bar {
-    height: 92px;
+    height: 82px;
     width: 100%;
 
     display: flex;
     align-items: center;
 
-    padding:
-        20px
-        24px
-        8px;
+    padding: 17px 22px 6px;
 
     position: relative;
 }
 
-
 .top-icon {
-    width: 42px;
-    height: 42px;
+    width: 38px;
+    height: 38px;
 
     background: transparent;
     color: #f5f5f7;
 
-    font-size: 42px;
-    font-weight: 200;
+    font-size: 34px;
+    font-weight: 300;
 
-    line-height: 38px;
+    line-height: 34px;
 
     display: flex;
     align-items: center;
@@ -104,19 +83,17 @@ button:disabled {
     padding: 0;
 }
 
-
 .top-title {
     position: absolute;
 
     left: 50%;
     transform: translateX(-50%);
 
-    font-size: 25px;
+    font-size: 21px;
     font-weight: 700;
 
     color: #f5f5f7;
 }
-
 
 .top-actions {
     margin-left: auto;
@@ -124,21 +101,19 @@ button:disabled {
     display: flex;
     align-items: center;
 
-    gap: 19px;
+    gap: 15px;
 
     color: #f5f5f7;
 }
 
-
 .chevron-down {
-    font-size: 35px;
+    font-size: 29px;
     line-height: 20px;
     font-weight: 300;
 }
 
-
 .more {
-    font-size: 32px;
+    font-size: 28px;
     line-height: 20px;
 }
 
@@ -149,51 +124,38 @@ button:disabled {
 
 .login-screen {
     min-height: 100vh;
-    background: #000000;
+    background: #000;
 }
-
 
 .login-content {
-    padding:
-        58px
-        28px
-        40px;
+    padding: 48px 25px 35px;
 }
-
 
 .login-content h1 {
     margin: 0;
 
-    font-size: clamp(
-        38px,
-        9vw,
-        53px
-    );
+    font-size: clamp(34px, 8vw, 45px);
 
-    line-height: 1.16;
+    line-height: 1.15;
 
-    letter-spacing: -1.8px;
+    letter-spacing: -1.25px;
 
-    font-weight: 750;
+    font-weight: 700;
 
     color: #f7f7fa;
 }
 
-
 .login-subtitle {
-    margin:
-        25px
-        0
-        44px;
+    margin: 20px 0 35px;
 
     max-width: 610px;
 
     color: #a8a8b0;
 
-    font-size: 21px;
-    line-height: 1.55;
+    font-size: 17px;
+    line-height: 1.5;
 
-    letter-spacing: 0.1px;
+    letter-spacing: 0;
 }
 
 
@@ -204,33 +166,27 @@ button:disabled {
 .main-input {
     width: 100%;
 
-    height: 84px;
+    height: 66px;
 
     border: none;
     outline: none;
 
-    border-radius: 45px;
+    border-radius: 34px;
 
     background: #202020;
 
     color: #eeeeF2;
 
-    padding:
-        0
-        30px;
+    padding: 0 24px;
 
-    font-size: 23px;
+    font-size: 17px;
 
     font-weight: 450;
-
-    box-shadow: none;
 }
-
 
 .main-input::placeholder {
-    color: #a5a5aa;
+    color: #929299;
 }
-
 
 .main-input:focus {
     background: #252525;
@@ -238,43 +194,37 @@ button:disabled {
 
 
 /* =========================================================
-   PRIMARY BUTTON
+   BUTTONS
    ========================================================= */
 
 .primary-button {
     width: 100%;
 
-    height: 86px;
+    height: 66px;
 
-    margin-top: 28px;
+    margin-top: 20px;
 
-    border-radius: 45px;
+    border-radius: 34px;
 
     background: #f1f3fa;
 
     color: #111114;
 
-    font-size: 23px;
+    font-size: 17px;
 
-    font-weight: 700;
+    font-weight: 650;
 
     transition:
-        transform 0.15s ease,
-        opacity 0.15s ease;
+        transform .15s ease,
+        opacity .15s ease;
 }
-
 
 .primary-button:active {
-    transform: scale(0.98);
+    transform: scale(.985);
 }
 
-
-/* =========================================================
-   ACCOUNT LINK
-   ========================================================= */
-
 .account-link {
-    margin-top: 26px;
+    margin-top: 21px;
 
     padding: 0;
 
@@ -282,34 +232,26 @@ button:disabled {
 
     color: #398bea;
 
-    font-size: 20px;
+    font-size: 16px;
 
-    font-weight: 650;
+    font-weight: 600;
 
     text-align: left;
 }
 
-
-/* =========================================================
-   OR
-   ========================================================= */
-
 .or-divider {
     width: 100%;
 
-    margin:
-        34px
-        0;
+    margin: 28px 0;
 
     display: flex;
 
     align-items: center;
 
-    gap: 18px;
+    gap: 15px;
 
-    color: #c5c5ca;
+    color: #bdbdc3;
 }
-
 
 .or-divider span {
     height: 1px;
@@ -319,59 +261,51 @@ button:disabled {
     background: #29292b;
 }
 
-
 .or-divider strong {
-    font-size: 19px;
+    font-size: 15px;
     font-weight: 450;
 }
-
-
-/* =========================================================
-   SECONDARY BUTTON
-   ========================================================= */
 
 .secondary-button {
     width: 100%;
 
-    height: 78px;
+    height: 62px;
 
-    border-radius: 42px;
+    border-radius: 32px;
 
     background: #303034;
 
     color: #f4f4f6;
 
-    font-size: 22px;
+    font-size: 17px;
 
-    font-weight: 700;
+    font-weight: 650;
 
     display: flex;
 
     align-items: center;
-
     justify-content: center;
 
-    gap: 15px;
+    gap: 12px;
 }
 
-
 .mail-icon {
-    font-size: 27px;
+    font-size: 21px;
 }
 
 
 /* =========================================================
-   REQUEST NOTE
+   EMAIL NOTE
    ========================================================= */
 
 .request-note {
-    margin-top: 28px;
+    margin-top: 22px;
 
     color: #85858d;
 
-    font-size: 15px;
+    font-size: 13px;
 
-    line-height: 1.55;
+    line-height: 1.5;
 
     text-align: center;
 }
@@ -382,142 +316,106 @@ button:disabled {
    ========================================================= */
 
 .code-content {
-    padding:
-        55px
-        28px
-        40px;
+    padding: 48px 25px 35px;
 }
-
 
 .code-content h1 {
     margin: 0;
 
-    font-size: clamp(
-        38px,
-        9vw,
-        53px
-    );
+    font-size: clamp(34px, 8vw, 45px);
 
-    line-height: 1.16;
+    line-height: 1.15;
 
-    letter-spacing: -1.5px;
+    letter-spacing: -1.2px;
 
-    font-weight: 750;
+    font-weight: 700;
 }
-
 
 .code-content .login-subtitle {
-    margin-top: 25px;
-    margin-bottom: 48px;
+    margin-top: 20px;
+    margin-bottom: 36px;
 }
-
 
 .code-input-wrapper {
     width: 100%;
 }
 
-
 .code-input {
     width: 100%;
 
-    height: 88px;
+    height: 72px;
 
     border: 0;
     outline: none;
 
-    border-radius: 15px;
+    border-radius: 14px;
 
-    background:
-        repeating-linear-gradient(
-            90deg,
-            transparent 0,
-            transparent 15%,
-            transparent 15.8%,
-            transparent 16.6%
-        );
+    background: #202020;
 
     color: #f5f5f7;
 
-    font-size: 38px;
+    font-size: 27px;
 
-    letter-spacing: 18px;
+    letter-spacing: 13px;
 
-    padding:
-        0
-        12px;
+    padding: 0 12px;
 
     text-align: center;
 }
 
-
-.code-input {
-    background-color: transparent;
-}
-
-
-.code-input::before {
-    content: "";
-}
-
-
 .code-input:focus {
-    outline: none;
+    background: #252525;
 }
-
 
 .verify-button {
     width: 100%;
 
-    height: 78px;
+    height: 64px;
 
-    margin-top: 32px;
+    margin-top: 24px;
 
-    border-radius: 42px;
+    border-radius: 32px;
 
     background: #f1f3fa;
 
     color: #111114;
 
-    font-size: 21px;
+    font-size: 17px;
 
-    font-weight: 700;
+    font-weight: 650;
 }
 
-
 .code-status {
-    min-height: 28px;
+    min-height: 24px;
 
-    margin-top: 22px;
+    margin-top: 18px;
 
     text-align: center;
 
     color: #92929a;
 
-    font-size: 15px;
+    font-size: 13px;
 
-    line-height: 1.5;
+    line-height: 1.45;
 }
 
 
 /* =========================================================
-   DASHBOARD
+   DASHBOARD TOP
    ========================================================= */
 
 .dashboard-screen {
     min-height: 100vh;
 
-    background: #000000;
+    background: #000;
 
-    padding-bottom: 125px;
+    padding-bottom: 112px;
 }
 
-
 .dashboard-top {
-    height: 92px;
+    height: 82px;
 
-    padding:
-        18px
-        28px;
+    padding: 15px 23px;
 
     display: flex;
 
@@ -526,10 +424,9 @@ button:disabled {
     justify-content: space-between;
 }
 
-
 .dashboard-logo {
-    width: 58px;
-    height: 58px;
+    width: 50px;
+    height: 50px;
 
     border-radius: 50%;
 
@@ -545,10 +442,8 @@ button:disabled {
     overflow: hidden;
 
     box-shadow:
-        0 0 18px
-        rgba(255,255,255,0.08);
+        0 0 17px rgba(255,255,255,.07);
 }
-
 
 .dashboard-logo img {
     width: 100%;
@@ -557,41 +452,38 @@ button:disabled {
     object-fit: cover;
 }
 
-
 .rewards-button {
-    height: 52px;
+    height: 44px;
 
-    min-width: 194px;
+    min-width: 155px;
 
-    padding:
-        0
-        20px;
+    padding: 0 17px;
 
-    border-radius: 30px;
+    border-radius: 24px;
 
     background: #f1f1f4;
 
     color: #1d1d20;
 
-    font-size: 18px;
+    font-size: 15px;
+
+    font-weight: 500;
 
     display: flex;
 
     align-items: center;
     justify-content: center;
 
-    gap: 10px;
+    gap: 8px;
 }
-
 
 .gift-icon {
-    font-size: 26px;
+    font-size: 21px;
 }
 
-
 .notification-button {
-    width: 58px;
-    height: 58px;
+    width: 50px;
+    height: 50px;
 
     border-radius: 50%;
 
@@ -599,7 +491,7 @@ button:disabled {
 
     color: #f4f4f6;
 
-    font-size: 30px;
+    font-size: 25px;
 
     position: relative;
 
@@ -609,19 +501,18 @@ button:disabled {
     justify-content: center;
 }
 
-
 .notification-dot {
     position: absolute;
 
-    width: 11px;
-    height: 11px;
+    width: 9px;
+    height: 9px;
 
     border-radius: 50%;
 
     background: #1687ff;
 
-    top: 2px;
-    right: 2px;
+    top: 1px;
+    right: 1px;
 }
 
 
@@ -630,77 +521,62 @@ button:disabled {
    ========================================================= */
 
 .dashboard-content {
-    padding:
-        30px
-        28px
-        20px;
+    padding: 25px 23px 18px;
 }
-
 
 .balance-section {
     text-align: center;
 
-    padding:
-        8px
-        0
-        70px;
+    padding: 7px 0 55px;
 }
-
 
 .balance-label {
     color: #b9b9c1;
 
-    font-size: 23px;
+    font-size: 18px;
 
     font-weight: 400;
 
-    letter-spacing: 0.2px;
+    letter-spacing: .2px;
 }
 
-
 .balance-value {
-    margin-top: 18px;
+    margin-top: 14px;
 
     color: #f3f3f7;
 
-    font-size: clamp(
-        54px,
-        13vw,
-        72px
-    );
+    font-size: clamp(47px, 11vw, 62px);
 
     line-height: 1;
 
-    font-weight: 750;
+    font-weight: 700;
 
-    letter-spacing: -2px;
+    letter-spacing: -1.7px;
 }
 
 
 /* =========================================================
-   ACTIONS
+   ACTION BUTTONS
    ========================================================= */
 
 .action-grid {
     display: grid;
 
-    grid-template-columns:
-        repeat(3, 1fr);
+    grid-template-columns: repeat(3, 1fr);
 
-    gap: 25px;
+    gap: 15px;
 
-    margin-bottom: 28px;
+    margin-bottom: 22px;
 }
 
-
 .action-card {
-    min-height: 124px;
+    min-height: 102px;
 
-    border-radius: 27px;
+    border-radius: 22px;
 
     background: #030303;
 
-    border: 2px solid #252527;
+    border: 1px solid #252527;
 
     color: #c7c7ce;
 
@@ -711,30 +587,29 @@ button:disabled {
     align-items: center;
     justify-content: center;
 
-    gap: 10px;
+    gap: 8px;
 
-    font-size: 23px;
+    font-size: 17px;
+
+    font-weight: 450;
 }
-
 
 .action-icon {
     color: #f0f0f3;
 
-    font-size: 39px;
+    font-size: 31px;
 
     line-height: 1;
 
     font-weight: 600;
 }
 
-
 .card-symbol {
-    font-size: 38px;
+    font-size: 31px;
 }
 
-
 .send-symbol {
-    font-size: 37px;
+    font-size: 30px;
 
     transform: rotate(-22deg);
 }
@@ -747,20 +622,17 @@ button:disabled {
 .feature-grid {
     display: grid;
 
-    grid-template-columns:
-        1.25fr
-        0.9fr;
+    grid-template-columns: 1.25fr .9fr;
 
-    gap: 16px;
+    gap: 12px;
 
-    margin-bottom: 28px;
+    margin-bottom: 22px;
 }
 
-
 .feature-card {
-    min-height: 230px;
+    min-height: 190px;
 
-    border-radius: 28px;
+    border-radius: 23px;
 
     border: 1px solid #27272a;
 
@@ -776,15 +648,13 @@ button:disabled {
     position: relative;
 }
 
-
 .cashback-card {
-    padding: 24px;
+    padding: 19px;
 }
 
-
 .feature-icon-circle {
-    width: 48px;
-    height: 48px;
+    width: 42px;
+    height: 42px;
 
     border-radius: 50%;
 
@@ -799,49 +669,45 @@ button:disabled {
 
     color: #f5f5f6;
 
-    font-size: 25px;
+    font-size: 21px;
 }
 
-
 .feature-title {
-    margin-top: 20px;
+    margin-top: 16px;
 
-    font-size: 26px;
+    font-size: 20px;
 
     color: #eeeeF2;
 
     font-weight: 500;
 }
 
-
 .progress-bar {
-    height: 14px;
+    height: 10px;
 
     width: 100%;
 
-    margin-top: 27px;
+    margin-top: 21px;
 
-    border-radius: 10px;
+    border-radius: 8px;
 
     background: #3a3b3f;
 
     overflow: hidden;
 }
 
-
 .progress-fill {
     width: 0%;
 
     height: 100%;
 
-    border-radius: 10px;
+    border-radius: 8px;
 
     background: #77787c;
 }
 
-
 .points-row {
-    margin-top: 12px;
+    margin-top: 10px;
 
     display: flex;
 
@@ -849,9 +715,8 @@ button:disabled {
 
     color: #a8a8af;
 
-    font-size: 20px;
+    font-size: 14px;
 }
-
 
 .points-row strong {
     color: #eeeeF2;
@@ -861,34 +726,29 @@ button:disabled {
 
 
 /* =========================================================
-   PLAN CARD
+   PLAN
    ========================================================= */
 
 .plan-card {
-    padding: 18px;
+    padding: 14px;
 
     display: flex;
 
     flex-direction: column;
 }
 
-
 .plan-image {
-    width: 112px;
-    height: 75px;
+    width: 88px;
+    height: 58px;
 
-    border-radius: 7px;
+    border-radius: 6px;
 
     background: #eeeeee;
 
     overflow: hidden;
 
-    margin:
-        0
-        auto
-        17px;
+    margin: 0 auto 13px;
 }
-
 
 .plan-image img {
     width: 100%;
@@ -896,34 +756,30 @@ button:disabled {
 
     object-fit: contain;
 
-    opacity: 0.13;
+    opacity: .13;
 }
-
 
 .plan-expiry {
     color: #b2b2b9;
 
-    font-size: 18px;
+    font-size: 14px;
 
-    line-height: 1.45;
+    line-height: 1.4;
 }
-
 
 .plan-expiry strong {
     color: #f0f0f2;
 
-    font-weight: 750;
+    font-weight: 700;
 }
-
 
 .plan-description {
     color: #b2b2b9;
 
-    font-size: 17px;
+    font-size: 13px;
 
-    margin-top: 4px;
+    margin-top: 3px;
 }
-
 
 .manage-plan-button {
     margin-top: auto;
@@ -932,20 +788,19 @@ button:disabled {
 
     color: #f2f2f5;
 
-    font-size: 20px;
+    font-size: 15px;
 
-    font-weight: 700;
+    font-weight: 650;
 
     text-align: left;
 
     padding: 0;
 }
 
-
 .manage-plan-button span {
-    font-size: 29px;
+    font-size: 23px;
 
-    margin-left: 6px;
+    margin-left: 5px;
 
     vertical-align: -2px;
 }
@@ -958,21 +813,19 @@ button:disabled {
 .transactions-button {
     width: 100%;
 
-    height: 88px;
+    height: 68px;
 
-    padding:
-        0
-        23px;
+    padding: 0 19px;
 
-    border-radius: 25px;
+    border-radius: 21px;
 
     background: #050505;
 
-    border: 2px solid #252527;
+    border: 1px solid #252527;
 
     color: #e5e5e9;
 
-    font-size: 23px;
+    font-size: 18px;
 
     display: flex;
 
@@ -981,18 +834,16 @@ button:disabled {
     justify-content: space-between;
 }
 
-
 .transaction-arrow {
-    font-size: 36px;
+    font-size: 29px;
 
     color: #dddddf;
 }
 
-
 .transaction-list {
-    margin-top: 10px;
+    margin-top: 8px;
 
-    border-radius: 22px;
+    border-radius: 18px;
 
     border: 1px solid #252527;
 
@@ -1001,13 +852,10 @@ button:disabled {
     background: #0b0b0c;
 }
 
-
 .transaction-item {
-    min-height: 75px;
+    min-height: 65px;
 
-    padding:
-        13px
-        18px;
+    padding: 11px 16px;
 
     border-bottom: 1px solid #222225;
 
@@ -1018,63 +866,58 @@ button:disabled {
     justify-content: space-between;
 }
 
-
 .transaction-item:last-child {
     border-bottom: 0;
 }
-
 
 .transaction-info {
     display: flex;
 
     flex-direction: column;
 
-    gap: 4px;
+    gap: 3px;
 }
-
 
 .transaction-info strong {
     color: #eeeeF2;
 
-    font-size: 16px;
+    font-size: 14px;
 }
-
 
 .transaction-info span {
     color: #898991;
 
-    font-size: 13px;
+    font-size: 12px;
 }
-
 
 .transaction-amount {
     color: #f1f1f4;
 
-    font-size: 16px;
+    font-size: 14px;
 }
 
 
 /* =========================================================
-   DEMO
+   DEMO ACCOUNT
    ========================================================= */
 
 .demo-account-label {
-    margin-top: 25px;
+    margin-top: 21px;
 
     text-align: center;
 
     color: #77777f;
 
-    font-size: 12px;
+    font-size: 10px;
 
     font-weight: 700;
 
-    letter-spacing: 2px;
+    letter-spacing: 1.8px;
 }
 
 
 /* =========================================================
-   BOTTOM NAVIGATION
+   BOTTOM NAV
    ========================================================= */
 
 .bottom-navigation {
@@ -1082,43 +925,32 @@ button:disabled {
 
     z-index: 50;
 
-    left: 28px;
-    right: 28px;
-    bottom: 20px;
+    left: 22px;
+    right: 22px;
+    bottom: 15px;
 
-    height: 95px;
+    height: 78px;
 
-    border-radius: 50px;
+    border-radius: 40px;
 
-    background:
-        rgba(
-            18,
-            18,
-            21,
-            0.96
-        );
+    background: rgba(18,18,21,.96);
 
     border: 1px solid #292a2e;
 
     box-shadow:
-        0 10px 35px
-        rgba(0,0,0,0.55);
+        0 10px 35px rgba(0,0,0,.55);
 
     display: grid;
 
-    grid-template-columns:
-        repeat(4, 1fr);
+    grid-template-columns: repeat(4, 1fr);
 
     align-items: center;
 
-    padding:
-        6px
-        10px;
+    padding: 5px 8px;
 }
 
-
 .nav-item {
-    height: 78px;
+    height: 66px;
 
     background: transparent;
 
@@ -1129,51 +961,46 @@ button:disabled {
     flex-direction: column;
 
     align-items: center;
-
     justify-content: center;
 
     gap: 2px;
 
-    font-size: 15px;
+    font-size: 11px;
 
-    font-weight: 650;
+    font-weight: 600;
 
     position: relative;
 }
 
-
 .nav-icon {
-    font-size: 32px;
+    font-size: 26px;
 
     line-height: 1;
 
-    margin-bottom: 4px;
+    margin-bottom: 3px;
 }
-
 
 .nav-item.active {
     color: #f4f5f8;
 
     text-shadow:
-        0 0 14px
-        rgba(255,255,255,0.15);
+        0 0 14px rgba(255,255,255,.15);
 }
-
 
 .nav-item.active::before {
     content: "";
 
     position: absolute;
 
-    width: 80px;
-    height: 65px;
+    width: 68px;
+    height: 55px;
 
     border-radius: 50%;
 
     background:
         radial-gradient(
             circle,
-            rgba(65,100,255,0.23),
+            rgba(65,100,255,.23),
             transparent 65%
         );
 
@@ -1192,21 +1019,17 @@ button:disabled {
 
     left: 50%;
 
-    bottom: 135px;
+    bottom: 110px;
 
     transform:
         translateX(-50%)
-        translateY(20px);
+        translateY(15px);
 
-    max-width: calc(
-        100% - 40px
-    );
+    max-width: calc(100% - 40px);
 
-    padding:
-        14px
-        20px;
+    padding: 11px 17px;
 
-    border-radius: 18px;
+    border-radius: 15px;
 
     background: #202024;
 
@@ -1214,7 +1037,7 @@ button:disabled {
 
     border: 1px solid #3b3b40;
 
-    font-size: 14px;
+    font-size: 13px;
 
     text-align: center;
 
@@ -1223,10 +1046,9 @@ button:disabled {
     pointer-events: none;
 
     transition:
-        opacity 0.2s ease,
-        transform 0.2s ease;
+        opacity .2s ease,
+        transform .2s ease;
 }
-
 
 .toast.show {
     opacity: 1;
@@ -1238,212 +1060,194 @@ button:disabled {
 
 
 /* =========================================================
-   RESPONSIVE
+   MOBILE
    ========================================================= */
 
-@media (
-    max-width: 420px
-) {
+@media (max-width: 420px) {
+
+    .top-bar {
+        height: 78px;
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    .top-title {
+        font-size: 20px;
+    }
 
     .login-content,
     .code-content {
-        padding-left: 24px;
-        padding-right: 24px;
+        padding-left: 23px;
+        padding-right: 23px;
     }
-
 
     .login-content h1,
     .code-content h1 {
-        font-size: 39px;
+        font-size: 35px;
     }
-
 
     .login-subtitle {
-        font-size: 19px;
+        font-size: 16px;
+        margin-top: 18px;
+        margin-bottom: 31px;
     }
-
 
     .main-input {
-        height: 80px;
-
-        font-size: 20px;
-    }
-
-
-    .primary-button {
-        height: 80px;
-
-        font-size: 21px;
-    }
-
-
-    .secondary-button {
-        height: 74px;
-
-        font-size: 20px;
-    }
-
-
-    .dashboard-top {
-        padding-left: 22px;
-        padding-right: 22px;
-    }
-
-
-    .dashboard-content {
-        padding-left: 22px;
-        padding-right: 22px;
-    }
-
-
-    .rewards-button {
-        min-width: 145px;
-
-        font-size: 15px;
-
-        padding-left: 13px;
-        padding-right: 13px;
-    }
-
-
-    .notification-button {
-        width: 52px;
-        height: 52px;
-    }
-
-
-    .dashboard-logo {
-        width: 52px;
-        height: 52px;
-    }
-
-
-    .action-grid {
-        gap: 12px;
-    }
-
-
-    .action-card {
-        min-height: 115px;
-
-        border-radius: 22px;
-
-        font-size: 19px;
-    }
-
-
-    .action-icon {
-        font-size: 32px;
-    }
-
-
-    .feature-grid {
-        gap: 10px;
-    }
-
-
-    .feature-card {
-        min-height: 210px;
-
-        border-radius: 22px;
-    }
-
-
-    .cashback-card {
-        padding: 18px;
-    }
-
-
-    .feature-title {
-        font-size: 21px;
-    }
-
-
-    .points-row {
-        font-size: 15px;
-    }
-
-
-    .plan-card {
-        padding: 14px;
-    }
-
-
-    .plan-expiry {
-        font-size: 15px;
-    }
-
-
-    .plan-description {
-        font-size: 14px;
-    }
-
-
-    .manage-plan-button {
+        height: 63px;
         font-size: 16px;
     }
 
-
-    .transactions-button {
-        height: 78px;
-
-        font-size: 20px;
+    .primary-button {
+        height: 63px;
+        font-size: 16px;
     }
 
-
-    .bottom-navigation {
-        left: 16px;
-        right: 16px;
-
-        bottom: 13px;
-
-        height: 88px;
+    .secondary-button {
+        height: 59px;
+        font-size: 16px;
     }
 
-
-    .nav-item {
-        font-size: 12px;
+    .account-link {
+        font-size: 15px;
     }
 
-
-    .nav-icon {
-        font-size: 27px;
-    }
-}
-
-
-/* =========================================================
-   VERY SMALL DEVICES
-   ========================================================= */
-
-@media (
-    max-width: 350px
-) {
-
-    .login-content h1,
-    .code-content h1 {
-        font-size: 34px;
+    .or-divider {
+        margin: 25px 0;
     }
 
+    .dashboard-top {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    .dashboard-content {
+        padding-left: 21px;
+        padding-right: 21px;
+    }
+
+    .dashboard-logo {
+        width: 48px;
+        height: 48px;
+    }
+
+    .notification-button {
+        width: 48px;
+        height: 48px;
+    }
+
+    .rewards-button {
+        min-width: 145px;
+        height: 42px;
+        font-size: 14px;
+    }
+
+    .balance-label {
+        font-size: 17px;
+    }
 
     .balance-value {
-        font-size: 51px;
+        font-size: 49px;
     }
 
+    .action-grid {
+        gap: 11px;
+    }
+
+    .action-card {
+        min-height: 94px;
+        border-radius: 20px;
+        font-size: 16px;
+    }
+
+    .action-icon {
+        font-size: 29px;
+    }
+
+    .feature-grid {
+        gap: 9px;
+    }
+
+    .feature-card {
+        min-height: 182px;
+        border-radius: 21px;
+    }
+
+    .cashback-card {
+        padding: 17px;
+    }
 
     .feature-title {
         font-size: 18px;
     }
 
-
     .points-row {
         font-size: 13px;
     }
 
+    .plan-card {
+        padding: 13px;
+    }
+
+    .plan-expiry {
+        font-size: 13px;
+    }
+
+    .plan-description {
+        font-size: 12px;
+    }
+
+    .manage-plan-button {
+        font-size: 14px;
+    }
+
+    .transactions-button {
+        height: 64px;
+        font-size: 17px;
+    }
+
+    .bottom-navigation {
+        left: 14px;
+        right: 14px;
+        bottom: 11px;
+        height: 74px;
+    }
+
+    .nav-item {
+        height: 62px;
+        font-size: 10px;
+    }
+
+    .nav-icon {
+        font-size: 24px;
+    }
+}
+
+
+/* =========================================================
+   SMALL DEVICES
+   ========================================================= */
+
+@media (max-width: 350px) {
+
+    .login-content h1,
+    .code-content h1 {
+        font-size: 32px;
+    }
+
+    .balance-value {
+        font-size: 45px;
+    }
+
+    .feature-title {
+        font-size: 16px;
+    }
+
+    .points-row {
+        font-size: 12px;
+    }
 
     .rewards-button {
         min-width: 125px;
-
-        font-size: 13px;
+        font-size: 12px;
     }
 }
