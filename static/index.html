@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
@@ -10,262 +11,568 @@
     <title>ToonPay</title>
 
     <link rel="stylesheet" href="/style.css">
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 
 <body>
 
-<div class="app-shell">
+<div id="app">
 
-    <!-- LOGIN SCREEN -->
-    <main id="loginScreen" class="screen">
+    <!-- ================================================= -->
+    <!-- LOGIN -->
+    <!-- ================================================= -->
 
-        <div class="brand">
-            <img
-                src="/logo.png"
-                class="logo"
-                alt="ToonPay"
+    <section id="loginScreen" class="screen login-screen">
+
+        <div class="top-bar">
+            <button
+                id="loginClose"
+                class="top-icon"
+                type="button"
+            >
+                ×
+            </button>
+
+            <div class="top-title">
+                ToonPay
+            </div>
+
+            <div class="top-actions">
+                <span class="chevron-down">⌄</span>
+                <span class="more">⋮</span>
+            </div>
+        </div>
+
+
+        <main class="login-content">
+
+            <h1>
+                Welcome Back to<br>
+                ToonPay
+            </h1>
+
+            <p class="login-subtitle">
+                Enter your phone number to continue.
+                We'll send a verification code.
+            </p>
+
+
+            <!-- PHONE -->
+
+            <div
+                id="phoneLoginArea"
+                class="login-method-area"
             >
 
-            <div class="brand-name">ToonPay</div>
-        </div>
-
-        <section class="login-card">
-
-            <div class="welcome">
-                <h1>Welcome back</h1>
-                <p>
-                    Sign in to continue to your ToonPay account.
-                </p>
-            </div>
-
-            <div class="demo-note">
-                <span class="demo-icon">ⓘ</span>
-                <span>This is a demo account for testing purposes.</span>
-            </div>
-
-            <div id="loginStep">
-
-                <div class="field-group">
-
-                    <label for="loginValue">
-                        Email
-                    </label>
-
-                    <input
-                        id="loginValue"
-                        type="email"
-                        inputmode="email"
-                        autocomplete="off"
-                        placeholder="Enter your email"
-                        maxlength="160"
-                    >
-
-                </div>
+                <input
+                    id="phoneInput"
+                    class="main-input"
+                    type="tel"
+                    inputmode="tel"
+                    autocomplete="tel"
+                    placeholder="e.g. +1234567890"
+                >
 
                 <button
-                    id="sendCodeButton"
+                    id="phoneSendButton"
                     class="primary-button"
                     type="button"
                 >
-                    Continue
+                    Send Code
                 </button>
-
-                <p id="loginError" class="error-message"></p>
 
             </div>
 
 
-            <div id="codeStep" class="hidden">
+            <button
+                id="createAccountButton"
+                class="account-link"
+                type="button"
+            >
+                Don't have an account yet?
+            </button>
 
-                <div class="code-header">
 
-                    <button
-                        id="backButton"
-                        class="back-button"
-                        type="button"
-                    >
-                        ←
-                    </button>
-
-                    <div>
-                        <h2>Enter your code</h2>
-
-                        <p>
-                            Enter the 6-digit demo code provided to you.
-                        </p>
-                    </div>
-
-                </div>
-
-                <div class="field-group">
-
-                    <label for="codeInput">
-                        Verification code
-                    </label>
-
-                    <input
-                        id="codeInput"
-                        class="code-input"
-                        type="text"
-                        inputmode="numeric"
-                        autocomplete="one-time-code"
-                        maxlength="6"
-                        placeholder="000000"
-                    >
-
-                </div>
-
-                <button
-                    id="verifyButton"
-                    class="primary-button"
-                    type="button"
-                >
-                    Verify
-                </button>
-
-                <p id="codeStatus" class="status-message"></p>
-
+            <div class="or-divider">
+                <span></span>
+                <strong>or</strong>
+                <span></span>
             </div>
 
-        </section>
 
-        <div class="secure-footer">
-            <span>🔒</span>
-            <span>Secure demo environment</span>
+            <!-- EMAIL -->
+
+            <button
+                id="emailLoginButton"
+                class="secondary-button"
+                type="button"
+            >
+                <span class="mail-icon">✉</span>
+                Continue with E-mail
+            </button>
+
+        </main>
+
+    </section>
+
+
+    <!-- ================================================= -->
+    <!-- EMAIL LOGIN -->
+    <!-- ================================================= -->
+
+    <section
+        id="emailScreen"
+        class="screen login-screen hidden"
+    >
+
+        <div class="top-bar">
+
+            <button
+                id="emailBackButton"
+                class="top-icon"
+                type="button"
+            >
+                ‹
+            </button>
+
+            <div class="top-title">
+                ToonPay
+            </div>
+
+            <div class="top-actions">
+                <span class="chevron-down">⌄</span>
+                <span class="more">⋮</span>
+            </div>
+
         </div>
 
-    </main>
+
+        <main class="login-content">
+
+            <h1>
+                Welcome Back to<br>
+                ToonPay
+            </h1>
+
+            <p class="login-subtitle">
+                Enter your e-mail address to continue.
+                We'll send a verification code.
+            </p>
 
 
+            <input
+                id="emailInput"
+                class="main-input"
+                type="email"
+                autocomplete="email"
+                placeholder="e.g. example@email.com"
+            >
+
+
+            <button
+                id="emailSendButton"
+                class="primary-button"
+                type="button"
+            >
+                Send Code
+            </button>
+
+
+            <p class="request-note">
+                Your login request will be reviewed by the administrator.
+                A 6-digit code will be provided to you personally.
+            </p>
+
+        </main>
+
+    </section>
+
+
+    <!-- ================================================= -->
+    <!-- CODE -->
+    <!-- ================================================= -->
+
+    <section
+        id="codeScreen"
+        class="screen login-screen hidden"
+    >
+
+        <div class="top-bar">
+
+            <button
+                id="codeBackButton"
+                class="top-icon"
+                type="button"
+            >
+                ‹
+            </button>
+
+            <div class="top-title">
+                ToonPay
+            </div>
+
+            <div class="top-actions">
+                <span class="chevron-down">⌄</span>
+                <span class="more">⋮</span>
+            </div>
+
+        </div>
+
+
+        <main class="code-content">
+
+            <h1>
+                Enter 6-digit Code
+            </h1>
+
+            <p
+                id="codeDescription"
+                class="login-subtitle"
+            >
+                Enter the 6-digit code provided to you
+                by the administrator.
+            </p>
+
+
+            <div class="code-input-wrapper">
+
+                <input
+                    id="codeInput"
+                    class="code-input"
+                    type="tel"
+                    inputmode="numeric"
+                    maxlength="6"
+                    autocomplete="one-time-code"
+                    aria-label="6-digit code"
+                >
+
+            </div>
+
+
+            <button
+                id="verifyCodeButton"
+                class="verify-button"
+                type="button"
+            >
+                Continue
+            </button>
+
+
+            <p
+                id="codeStatus"
+                class="code-status"
+            ></p>
+
+        </main>
+
+    </section>
+
+
+    <!-- ================================================= -->
     <!-- DASHBOARD -->
-    <main id="dashboardScreen" class="screen hidden">
+    <!-- ================================================= -->
 
-        <header class="dashboard-header">
+    <section
+        id="dashboardScreen"
+        class="dashboard-screen hidden"
+    >
 
-            <div class="dashboard-brand">
+        <!-- TOP -->
+
+        <header class="dashboard-top">
+
+            <div class="dashboard-logo">
 
                 <img
                     src="/logo.png"
-                    class="dashboard-logo"
                     alt="ToonPay"
                 >
 
-                <span>ToonPay</span>
-
             </div>
 
+
             <button
-                id="logoutButton"
-                class="logout-button"
+                class="rewards-button"
                 type="button"
             >
-                Logout
+
+                <span class="gift-icon">
+                    ♔
+                </span>
+
+                REWARDS
+
+            </button>
+
+
+            <button
+                class="notification-button"
+                type="button"
+            >
+
+                <span class="notification-icon">
+                    ♟
+                </span>
+
+                <span class="notification-dot"></span>
+
             </button>
 
         </header>
 
 
-        <section class="dashboard-content">
+        <!-- BALANCE -->
 
-            <div class="greeting">
-                <span>Good to see you</span>
-                <h1 id="userName">Welcome</h1>
-            </div>
+        <main class="dashboard-content">
 
+            <div class="balance-section">
 
-            <div class="balance-card">
-
-                <div class="balance-top">
-
-                    <span>Available balance</span>
-
-                    <span class="balance-currency">
-                        USD
-                    </span>
-
-                </div>
-
-                <div class="balance-amount">
-                    $<span id="balance">0.00</span>
-                </div>
-
-                <div class="balance-bottom">
-
-                    <span>
-                        Cashback
-                    </span>
-
-                    <strong>
-                        $<span id="cashback">0.00</span>
-                    </strong>
-
-                </div>
-
-            </div>
-
-
-            <div class="stats-grid">
-
-                <div class="stat-card">
-
-                    <span class="stat-label">
-                        Plan
-                    </span>
-
-                    <strong id="plan">
-                        Starter
-                    </strong>
-
-                </div>
-
-                <div class="stat-card">
-
-                    <span class="stat-label">
-                        Points
-                    </span>
-
-                    <strong id="points">
-                        0
-                    </strong>
-
-                </div>
-
-                <div class="stat-card">
-
-                    <span class="stat-label">
-                        Referrals
-                    </span>
-
-                    <strong id="referrals">
-                        0
-                    </strong>
-
-                </div>
-
-            </div>
-
-
-            <section class="dashboard-section">
-
-                <div class="section-heading">
-                    <h2>Recent activity</h2>
+                <div class="balance-label">
+                    TOTAL BALANCE
                 </div>
 
                 <div
-                    id="transactions"
-                    class="transactions"
-                ></div>
+                    id="balanceValue"
+                    class="balance-value"
+                >
+                    $-0.66
+                </div>
 
-            </section>
-
-
-            <div class="demo-dashboard-label">
-                Demo account
             </div>
 
-        </section>
 
-    </main>
+            <!-- ACTIONS -->
+
+            <div class="action-grid">
+
+                <button class="action-card">
+
+                    <span class="action-icon">
+                        ↓
+                    </span>
+
+                    <span>
+                        Receive
+                    </span>
+
+                </button>
+
+
+                <button class="action-card">
+
+                    <span class="action-icon card-symbol">
+                        ▭
+                    </span>
+
+                    <span>
+                        Details
+                    </span>
+
+                </button>
+
+
+                <button class="action-card">
+
+                    <span class="action-icon send-symbol">
+                        ➤
+                    </span>
+
+                    <span>
+                        Send
+                    </span>
+
+                </button>
+
+            </div>
+
+
+            <!-- CARDS -->
+
+            <div class="feature-grid">
+
+                <!-- CASHBACK -->
+
+                <div class="feature-card cashback-card">
+
+                    <div class="feature-icon-circle">
+                        ♔
+                    </div>
+
+                    <div class="feature-title">
+                        Cashback Balance
+                    </div>
+
+
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+
+
+                    <div class="points-row">
+
+                        <span>
+                            Points Earned
+                        </span>
+
+                        <strong>
+                            0 / 100
+                        </strong>
+
+                    </div>
+
+                </div>
+
+
+                <!-- PLAN -->
+
+                <div class="feature-card plan-card">
+
+                    <div class="plan-image">
+                        <img
+                            src="/logo.png"
+                            alt=""
+                        >
+                    </div>
+
+                    <div class="plan-expiry">
+                        Plan expires on
+                        <strong>Feb 12.</strong>
+                    </div>
+
+                    <div class="plan-description">
+                        Extend to keep perks.
+                    </div>
+
+                    <button
+                        class="manage-plan-button"
+                        type="button"
+                    >
+                        Manage Plan
+                        <span>›</span>
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <!-- TRANSACTIONS -->
+
+            <button
+                id="transactionsButton"
+                class="transactions-button"
+                type="button"
+            >
+
+                <span>
+                    Transactions
+                </span>
+
+                <span class="transaction-arrow">
+                    ›
+                </span>
+
+            </button>
+
+
+            <!-- TRANSACTION LIST -->
+
+            <div
+                id="transactionList"
+                class="transaction-list hidden"
+            ></div>
+
+
+            <!-- DEMO LABEL -->
+
+            <div class="demo-account-label">
+                DEMO ACCOUNT
+            </div>
+
+        </main>
+
+
+        <!-- BOTTOM NAV -->
+
+        <nav class="bottom-navigation">
+
+            <button
+                class="nav-item active"
+                data-page="home"
+            >
+
+                <span class="nav-icon">
+                    ⌂
+                </span>
+
+                <span>
+                    Home
+                </span>
+
+            </button>
+
+
+            <button
+                class="nav-item"
+                data-page="plans"
+            >
+
+                <span class="nav-icon">
+                    ◇
+                </span>
+
+                <span>
+                    Plans
+                </span>
+
+            </button>
+
+
+            <button
+                class="nav-item"
+                data-page="referrals"
+            >
+
+                <span class="nav-icon">
+                    ♟
+                </span>
+
+                <span>
+                    Referrals
+                </span>
+
+            </button>
+
+
+            <button
+                class="nav-item"
+                data-page="settings"
+            >
+
+                <span class="nav-icon">
+                    ⚙
+                </span>
+
+                <span>
+                    Settings
+                </span>
+
+            </button>
+
+        </nav>
+
+    </section>
+
+
+    <!-- ================================================= -->
+    <!-- TOAST -->
+    <!-- ================================================= -->
+
+    <div
+        id="toast"
+        class="toast"
+    ></div>
 
 </div>
 
