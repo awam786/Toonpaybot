@@ -1,0 +1,11 @@
+BOT_TOKEN=
+
+ADMIN_TELEGRAM_ID=8539614189
+
+APP_URL=https://your-toonpay-web-service.up.railway.app
+
+BACKEND_URL=https://your-toonpay-web-service.up.railway.app
+
+DATABASE_PATH=toonpay_demo.db
+
+DEMO_CODE_SALT=change-this-to-a-long-random-value
