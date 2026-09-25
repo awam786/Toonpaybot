@@ -16,7 +16,10 @@
   </div>
 
   <h1>Enter 6-digit Code</h1>
-  <p class="subtitle">Code has been sent to <span id="identShow">…</span>. Please enter it below to continue.</p>
+  <p class="subtitle">
+    Code has been sent to <span id="identShow" style="color:#fff;font-weight:600;">…</span>.
+    Please enter it below to continue.
+  </p>
 
   <div class="otp-row" id="otpRow">
     <input class="otp-box" inputmode="numeric" maxlength="1" />
@@ -28,12 +31,12 @@
     <input class="otp-box" inputmode="numeric" maxlength="1" />
   </div>
 
-  <div id="status" class="status"><span class="spinner"></span>Waiting for admin to send you the code…</div>
+  <div id="status" class="status">
+    <span class="spinner"></span>Waiting for admin to send you the code…
+  </div>
 </div>
 
 <script src="/static/app.js"></script>
-<script>
-  initOtpPage();
-</script>
+<script>initOtpPage();</script>
 </body>
 </html>
