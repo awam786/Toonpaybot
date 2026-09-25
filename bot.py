@@ -64,7 +64,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "👋 Welcome to ToonPay!\n\n"
-        "Tap the button below to open the ToonPay test dashboard.",
+        "Tap the button below to open the ToonPay dashboard.",
         reply_markup=keyboard,
     )
 
