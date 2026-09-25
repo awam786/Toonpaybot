@@ -16,9 +16,17 @@
   </div>
 
   <h1>Welcome Back to ToonPay</h1>
-  <p class="subtitle">Enter your phone number to continue. We'll send a verification code.</p>
+  <p class="subtitle" id="subtitle">Enter your phone number to continue. We'll send a verification code.</p>
 
-  <input id="phone" class="input" type="tel" placeholder="e.g. +1234567890" autocomplete="off" />
+  <input
+    id="identifier"
+    class="input"
+    type="tel"
+    placeholder="e.g. +1234567890"
+    autocomplete="off"
+    inputmode="tel"
+  />
+
   <a class="link-blue" href="#" id="noAccount">Don't have an account yet?</a>
 
   <button class="btn-primary" id="sendCodeBtn">Send Code</button>
@@ -28,6 +36,8 @@
   <button class="btn-secondary" id="emailBtn">
     <span>✉️</span> Continue with E-mail
   </button>
+
+  <div id="errorMsg" class="status error" style="display:none;"></div>
 </div>
 
 <script src="/static/app.js"></script>
