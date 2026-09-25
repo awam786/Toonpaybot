@@ -1,262 +1,263 @@
 import os
-import sqlite3
 import secrets
-
+import sqlite3
+from pathlib import Path
 from datetime import datetime, timezone
 
-
-DB = os.getenv(
-    "DATABASE_PATH",
-    "toonpay_demo.db"
-)
+DB_PATH = os.getenv("DATABASE_PATH", "toonpay_demo.db")
 
 
-def conn():
-
-    c = sqlite3.connect(
-        DB,
-        check_same_thread=False
-    )
-
-    c.row_factory = sqlite3.Row
-
-    return c
-
-
-def now():
-
-    return datetime.now(
-        timezone.utc
-    ).isoformat()
+def get_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def init_db():
+    conn = get_connection()
 
-    c = conn()
-
-    c.executescript(
-        '''
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS login_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id INTEGER NOT NULL,
             username TEXT,
             login_value TEXT NOT NULL,
             login_method TEXT NOT NULL,
-            verification_code TEXT,
-            entered_code TEXT,
+            demo_code_hash TEXT,
+            code_configured INTEGER NOT NULL DEFAULT 0,
+            code_verified INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'waiting_code',
             session_token TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
-        );
+        )
+    """)
 
-        CREATE INDEX IF NOT EXISTS idx_login_status
-        ON login_requests(status);
-
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
-            token TEXT PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id INTEGER NOT NULL,
             username TEXT,
+            session_token TEXT UNIQUE NOT NULL,
             created_at TEXT NOT NULL
-        );
-        '''
-    )
-
-    # Upgrade an older database if necessary.
-    cols = {
-        r[1]
-        for r in c.execute(
-            "PRAGMA table_info(login_requests)"
-        ).fetchall()
-    }
-
-    if "verification_code" not in cols:
-
-        c.execute(
-            "ALTER TABLE login_requests "
-            "ADD COLUMN verification_code TEXT"
         )
+    """)
 
-    c.commit()
-    c.close()
+    conn.commit()
+    conn.close()
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
 
 
 def create_login_request(
-    telegram_id,
-    username,
-    login_value,
-    login_method
+    telegram_id: int,
+    username: str | None,
+    login_value: str,
+    login_method: str,
 ):
+    conn = get_connection()
+    timestamp = now()
 
-    t = now()
-
-    # Synthetic 6-digit code for this demo.
-    code = f"{secrets.randbelow(1000000):06d}"
-
-    c = conn()
-
-    cur = c.execute(
+    cursor = conn.execute(
         """
-        INSERT INTO login_requests
-        (
+        INSERT INTO login_requests (
             telegram_id,
             username,
             login_value,
             login_method,
-            verification_code,
             status,
             created_at,
             updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, 'waiting_code', ?, ?)
         """,
         (
             telegram_id,
             username,
             login_value,
             login_method,
-            code,
-            "waiting_code",
-            t,
-            t
-        )
+            timestamp,
+            timestamp,
+        ),
     )
 
-    rid = cur.lastrowid
+    request_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
 
-    c.commit()
-    c.close()
-
-    return rid, code
+    return request_id
 
 
-def get_request(rid):
+def get_request(request_id: int):
+    conn = get_connection()
 
-    c = conn()
-
-    r = c.execute(
-        "SELECT * FROM login_requests WHERE id=?",
-        (rid,)
+    row = conn.execute(
+        """
+        SELECT *
+        FROM login_requests
+        WHERE id = ?
+        """,
+        (request_id,),
     ).fetchone()
 
-    c.close()
+    conn.close()
+    return row
 
-    return dict(r) if r else None
 
+def set_demo_code(request_id: int, code_hash: str):
+    conn = get_connection()
 
-def submit_code(rid, code):
-
-    c = conn()
-
-    c.execute(
+    conn.execute(
         """
         UPDATE login_requests
-        SET entered_code=?,
-            status='pending_admin',
-            updated_at=?
-        WHERE id=?
+        SET
+            demo_code_hash = ?,
+            code_configured = 1,
+            status = 'waiting_user_code',
+            updated_at = ?
+        WHERE id = ?
         """,
         (
-            code,
+            code_hash,
             now(),
-            rid
-        )
+            request_id,
+        ),
     )
 
-    c.commit()
-    c.close()
+    conn.commit()
+    conn.close()
 
 
-def set_status(rid, status):
+def mark_code_verified(request_id: int):
+    conn = get_connection()
 
-    c = conn()
-
-    c.execute(
+    conn.execute(
         """
         UPDATE login_requests
-        SET status=?,
-            updated_at=?
-        WHERE id=?
+        SET
+            code_verified = 1,
+            status = 'approved',
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now(),
+            request_id,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def mark_code_rejected(request_id: int):
+    conn = get_connection()
+
+    conn.execute(
+        """
+        UPDATE login_requests
+        SET
+            code_verified = 0,
+            status = 'rejected',
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now(),
+            request_id,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def set_status(request_id: int, status: str):
+    conn = get_connection()
+
+    conn.execute(
+        """
+        UPDATE login_requests
+        SET
+            status = ?,
+            updated_at = ?
+        WHERE id = ?
         """,
         (
             status,
             now(),
-            rid
-        )
+            request_id,
+        ),
     )
 
-    c.commit()
-    c.close()
+    conn.commit()
+    conn.close()
 
 
-def create_session(
-    tid,
-    username
-):
+def create_session(telegram_id: int, username: str | None):
+    token = secrets.token_urlsafe(32)
 
-    token = secrets.token_urlsafe(48)
+    conn = get_connection()
 
-    c = conn()
-
-    c.execute(
+    conn.execute(
         """
-        INSERT INTO sessions
-        (
-            token,
+        INSERT INTO sessions (
             telegram_id,
             username,
+            session_token,
             created_at
         )
         VALUES (?, ?, ?, ?)
         """,
         (
-            token,
-            tid,
+            telegram_id,
             username,
-            now()
-        )
+            token,
+            now(),
+        ),
     )
 
-    c.commit()
-    c.close()
+    conn.commit()
+    conn.close()
 
     return token
 
 
-def attach_session(
-    rid,
-    token
-):
+def get_session(session_token: str):
+    conn = get_connection()
 
-    c = conn()
-
-    c.execute(
+    row = conn.execute(
         """
-        UPDATE login_requests
-        SET session_token=?,
-            updated_at=?
-        WHERE id=?
+        SELECT *
+        FROM sessions
+        WHERE session_token = ?
         """,
-        (
-            token,
-            now(),
-            rid
-        )
-    )
-
-    c.commit()
-    c.close()
-
-
-def get_session(token):
-
-    c = conn()
-
-    r = c.execute(
-        "SELECT * FROM sessions WHERE token=?",
-        (token,)
+        (session_token,),
     ).fetchone()
 
-    c.close()
+    conn.close()
+    return row
 
-    return dict(r) if r else None
+
+def attach_session(request_id: int, session_token: str):
+    conn = get_connection()
+
+    conn.execute(
+        """
+        UPDATE login_requests
+        SET
+            session_token = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            session_token,
+            now(),
+            request_id,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
