@@ -1,1011 +1,673 @@
-const tg = window.Telegram?.WebApp;
+const loginScreen = document.getElementById("loginScreen");
+const dashboardScreen = document.getElementById("dashboardScreen");
 
-if (tg) {
-  tg.ready();
-  tg.expand();
-}
+const loginValue = document.getElementById("loginValue");
+const sendCodeButton = document.getElementById("sendCodeButton");
 
+const loginStep = document.getElementById("loginStep");
+const codeStep = document.getElementById("codeStep");
 
-const app = document.getElementById("app");
+const codeInput = document.getElementById("codeInput");
+const verifyButton = document.getElementById("verifyButton");
 
-const u =
-  tg?.initDataUnsafe?.user || {};
+const backButton = document.getElementById("backButton");
 
+const loginError = document.getElementById("loginError");
+const codeStatus = document.getElementById("codeStatus");
 
-const telegramId =
-  u.id || 999000001;
-
-
-const username =
-  u.username || "demo_user";
-
+const logoutButton = document.getElementById("logoutButton");
 
 let requestId = null;
-
-let pollTimer = null;
-
-let sessionToken =
-  localStorage.getItem(
-    "toonpay_demo_session"
-  );
+let statusTimer = null;
+let sessionToken = null;
 
 
-const esc = v =>
-  String(v).replace(
-    /[&<>"']/g,
-    c => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;"
-    }[c])
-  );
+/* -------------------------------------------------------
+   TELEGRAM WEB APP
+------------------------------------------------------- */
 
+const telegram = window.Telegram?.WebApp;
 
-const render = html => {
-  app.innerHTML = html;
-};
-
-
-const logo = () =>
-  `<img
-    class="brand-logo"
-    src="/toonpay-logo.jpg"
-    alt="ToonPay"
-  >`;
-
-
-function showLogin() {
-
-  clearInterval(pollTimer);
-
-  render(`
-    <div class="screen">
-
-      <div class="topbar">
-
-        <div class="brand">
-          ${logo()}
-          <span>ToonPay</span>
-        </div>
-
-        <div class="demo-pill">
-          DEMO
-        </div>
-
-      </div>
-
-      <div class="auth-wrap">
-
-        <div class="auth-title">
-          Welcome back
-        </div>
-
-        <div class="auth-subtitle">
-          Enter your email address to continue with the demo.
-        </div>
-
-        <div class="input-wrap">
-
-          <input
-            id="emailInput"
-            class="input"
-            type="email"
-            autocomplete="off"
-            placeholder="name@example.com"
-          >
-
-        </div>
-
-        <button
-          class="primary-button"
-          onclick="startLogin()"
-        >
-          Continue
-        </button>
-
-        <div class="secure-note">
-          <span>●</span>
-          Demo verification • no real account access
-        </div>
-
-      </div>
-
-    </div>
-  `);
+if (telegram) {
+    telegram.ready();
+    telegram.expand();
 }
 
 
-async function startLogin() {
-
-  const input =
-    document.getElementById(
-      "emailInput"
-    );
-
-  const value =
-    input.value.trim();
-
-
-  if (!value) {
-
-    return toast(
-      "Enter an email address."
-    );
-
-  }
-
-
-  try {
-
-    const r = await fetch(
-      "/api/login/request",
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json"
-        },
-
-        body: JSON.stringify({
-          telegram_id: telegramId,
-          username: username,
-          login_value: value,
-          login_method: "email"
-        })
-      }
-    );
-
-
-    const d = await r.json();
-
-
-    if (!r.ok) {
-
-      return toast(
-        d.detail ||
-        "Unable to continue."
-      );
-
-    }
-
-
-    requestId =
-      d.request_id;
-
-
-    showOtp(value);
-
-
-  } catch (e) {
-
-    toast(
-      "Connection error. Please try again."
-    );
-
-  }
-}
-
-
-function showOtp(email) {
-
-  render(`
-    <div class="screen">
-
-      <div class="topbar">
-
-        <div class="brand">
-          ${logo()}
-          <span>ToonPay</span>
-        </div>
-
-        <div class="demo-pill">
-          DEMO
-        </div>
-
-      </div>
-
-      <div class="auth-wrap otp-wrap">
-
-        <div class="code-icon">
-          ✓
-        </div>
-
-        <div class="auth-title">
-          Enter your code
-        </div>
-
-        <div class="auth-subtitle">
-
-          A demo verification code was
-          generated for
-
-          <strong>
-            ${esc(email)}
-          </strong>.
-
-          Ask the demo administrator
-          for the code.
-
-        </div>
-
-        <input
-          id="otpInput"
-          class="otp-box"
-          inputmode="numeric"
-          maxlength="6"
-          autocomplete="one-time-code"
-          placeholder="000000"
-        >
-
-        <button
-          class="primary-button"
-          onclick="submitOtp()"
-        >
-          Verify
-        </button>
-
-        <button
-          class="secondary-button"
-          onclick="showLogin()"
-        >
-          Use another email
-        </button>
-
-        <div
-          id="otpStatus"
-          class="waiting"
-        >
-          Waiting for your demo code...
-        </div>
-
-      </div>
-
-    </div>
-  `);
-
-
-  document
-    .getElementById("otpInput")
-    .addEventListener(
-      "input",
-      function () {
-
-        this.value =
-          this.value
-            .replace(/\D/g, "")
-            .slice(0, 6);
-
-      }
-    );
-
-
-  pollTimer =
-    setInterval(
-      checkStatus,
-      1500
-    );
-}
-
-
-async function submitOtp() {
-
-  const code =
-    document
-      .getElementById("otpInput")
-      .value;
-
-
-  if (!/^\d{6}$/.test(code)) {
-
-    return otpMsg(
-      "Enter the 6-digit demo code.",
-      "error"
-    );
-
-  }
-
-
-  try {
-
-    const r = await fetch(
-      "/api/login/submit-code",
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json"
-        },
-
-        body: JSON.stringify({
-          request_id: requestId,
-          entered_code: code
-        })
-      }
-    );
-
-
-    const d =
-      await r.json();
-
-
-    if (!r.ok) {
-
-      return otpMsg(
-        d.detail ||
-        "Unable to verify.",
-        "error"
-      );
-
-    }
-
+/* -------------------------------------------------------
+   TELEGRAM USER
+------------------------------------------------------- */
+
+function getTelegramUser() {
 
     if (
-      d.status === "rejected"
+        telegram &&
+        telegram.initDataUnsafe &&
+        telegram.initDataUnsafe.user
     ) {
-
-      return otpMsg(
-        "That demo code is not correct.",
-        "error"
-      );
-
+        return telegram.initDataUnsafe.user;
     }
 
-
-    otpMsg(
-      "Code accepted. Waiting for administrator approval...",
-      "success"
-    );
-
-
-  } catch (e) {
-
-    otpMsg(
-      "Connection error.",
-      "error"
-    );
-
-  }
+    return {
+        id: 0,
+        username: "demo_user"
+    };
 }
 
 
-async function checkStatus() {
+/* -------------------------------------------------------
+   HELPERS
+------------------------------------------------------- */
 
-  if (!requestId) {
-    return;
-  }
-
-
-  try {
-
-    const r =
-      await fetch(
-        `/api/login/status/${requestId}`
-      );
+function show(element) {
+    element.classList.remove("hidden");
+}
 
 
-    const d =
-      await r.json();
+function hide(element) {
+    element.classList.add("hidden");
+}
 
 
-    if (
-      d.status === "approved"
-    ) {
+function setButtonLoading(button, loading, originalText) {
 
-      clearInterval(
-        pollTimer
-      );
-
-
-      sessionToken =
-        d.session_token;
-
-
-      localStorage.setItem(
-        "toonpay_demo_session",
-        sessionToken
-      );
+    if (loading) {
+        button.disabled = true;
+        button.dataset.originalText = originalText;
+        button.innerHTML = `
+            <span class="spinner"></span>
+            Please wait...
+        `;
+    } else {
+        button.disabled = false;
+        button.textContent =
+            button.dataset.originalText || originalText;
+    }
+}
 
 
-      success();
+function clearMessages() {
+    loginError.textContent = "";
+    codeStatus.textContent = "";
+
+    loginError.className = "error-message";
+    codeStatus.className = "status-message";
+}
 
 
-    } else if (
-      d.status === "rejected"
-    ) {
+/* -------------------------------------------------------
+   LOGIN REQUEST
+------------------------------------------------------- */
 
-      clearInterval(
-        pollTimer
-      );
+async function requestLogin() {
 
+    clearMessages();
 
-      otpMsg(
-        "Demo verification was rejected. Please try again.",
-        "error"
-      );
+    const value = loginValue.value.trim();
 
+    if (!value) {
+        loginError.textContent =
+            "Please enter your email.";
+        return;
     }
 
+    const user = getTelegramUser();
 
-  } catch (e) {}
-
-}
-
-
-function otpMsg(
-  message,
-  type
-) {
-
-  const x =
-    document.getElementById(
-      "otpStatus"
+    setButtonLoading(
+        sendCodeButton,
+        true,
+        "Continue"
     );
 
+    try {
 
-  if (x) {
+        const response = await fetch(
+            "/api/login/request",
+            {
+                method: "POST",
 
-    x.innerHTML =
-      `<span class="${type}">
-        ${esc(message)}
-      </span>`;
+                headers: {
+                    "Content-Type": "application/json"
+                },
 
-  }
-}
+                body: JSON.stringify({
+                    telegram_id: user.id,
+                    username: user.username || null,
+                    login_value: value,
+                    login_method: "email"
+                })
+            }
+        );
 
+        const data = await response.json();
 
-function success() {
+        if (!response.ok) {
+            throw new Error(
+                data.detail || "Unable to continue."
+            );
+        }
 
-  render(`
-    <div class="screen center">
+        requestId = data.request_id;
 
-      <div>
+        hide(loginStep);
+        show(codeStep);
 
-        <img
-          class="success-logo"
-          src="/toonpay-logo.jpg"
-          alt="ToonPay"
-        >
+        codeInput.value = "";
+        codeInput.focus();
 
-        <div
-          class="auth-title success-title"
-        >
-          Welcome back
-        </div>
+        codeStatus.textContent =
+            "Your demo code will be provided by the administrator.";
 
-        <div class="auth-subtitle">
+        codeStatus.className =
+            "status-message info";
 
-          Verification approved.
+        startStatusPolling();
 
-          <br>
+    } catch (error) {
 
-          Opening your dashboard...
+        loginError.textContent =
+            error.message || "Something went wrong.";
 
-        </div>
+    } finally {
 
-      </div>
-
-    </div>
-  `);
-
-
-  setTimeout(
-    loadDashboard,
-    800
-  );
-}
-
-
-function toast(message) {
-
-  const x =
-    document.createElement(
-      "div"
-    );
-
-
-  x.textContent =
-    message;
-
-
-  Object.assign(
-    x.style,
-    {
-      position: "fixed",
-      left: "18px",
-      right: "18px",
-      bottom: "105px",
-      padding: "15px 17px",
-      background: "#1b1b1e",
-      border: "1px solid #333338",
-      borderRadius: "18px",
-      color: "#fff",
-      textAlign: "center",
-      zIndex: 9999,
-      boxShadow:
-        "0 14px 40px #000b"
+        setButtonLoading(
+            sendCodeButton,
+            false,
+            "Continue"
+        );
     }
-  );
-
-
-  document.body.appendChild(x);
-
-
-  setTimeout(
-    () => x.remove(),
-    2600
-  );
 }
 
+
+/* -------------------------------------------------------
+   STATUS POLLING
+------------------------------------------------------- */
+
+function startStatusPolling() {
+
+    stopStatusPolling();
+
+    statusTimer = setInterval(
+        checkLoginStatus,
+        1500
+    );
+}
+
+
+function stopStatusPolling() {
+
+    if (statusTimer) {
+        clearInterval(statusTimer);
+        statusTimer = null;
+    }
+}
+
+
+async function checkLoginStatus() {
+
+    if (!requestId) {
+        return;
+    }
+
+    try {
+
+        const response = await fetch(
+            `/api/login/status/${requestId}`
+        );
+
+        if (!response.ok) {
+            return;
+        }
+
+        const data = await response.json();
+
+        if (
+            data.status === "approved" &&
+            data.session_token
+        ) {
+
+            sessionToken = data.session_token;
+
+            localStorage.setItem(
+                "toonpay_session",
+                sessionToken
+            );
+
+            stopStatusPolling();
+
+            await loadDashboard();
+
+            return;
+        }
+
+        if (data.status === "rejected") {
+
+            stopStatusPolling();
+
+            codeStatus.textContent =
+                "The code was not accepted. Please try again.";
+
+            codeStatus.className =
+                "status-message error";
+        }
+
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+
+/* -------------------------------------------------------
+   CODE VERIFICATION
+------------------------------------------------------- */
+
+async function verifyCode() {
+
+    clearMessages();
+
+    const code = codeInput.value.trim();
+
+    if (!/^\d{6}$/.test(code)) {
+
+        codeStatus.textContent =
+            "Enter the 6-digit demo code.";
+
+        codeStatus.className =
+            "status-message error";
+
+        return;
+    }
+
+    if (!requestId) {
+
+        codeStatus.textContent =
+            "Your login session has expired.";
+
+        codeStatus.className =
+            "status-message error";
+
+        return;
+    }
+
+    setButtonLoading(
+        verifyButton,
+        true,
+        "Verify"
+    );
+
+    try {
+
+        const response = await fetch(
+            "/api/login/submit-code",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    request_id: requestId,
+                    entered_code: code
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail || "Unable to verify the code."
+            );
+        }
+
+        if (data.status === "approved") {
+
+            codeStatus.textContent =
+                "Code verified.";
+
+            codeStatus.className =
+                "status-message success";
+
+            await checkLoginStatus();
+
+        } else {
+
+            codeStatus.textContent =
+                "Incorrect demo code. Please try again.";
+
+            codeStatus.className =
+                "status-message error";
+
+            codeInput.select();
+        }
+
+    } catch (error) {
+
+        codeStatus.textContent =
+            error.message || "Verification failed.";
+
+        codeStatus.className =
+            "status-message error";
+
+    } finally {
+
+        setButtonLoading(
+            verifyButton,
+            false,
+            "Verify"
+        );
+    }
+}
+
+
+/* -------------------------------------------------------
+   DASHBOARD
+------------------------------------------------------- */
 
 async function loadDashboard() {
 
-  if (!sessionToken) {
+    if (!sessionToken) {
+        return;
+    }
 
-    return showLogin();
+    try {
 
-  }
+        const response = await fetch(
+            "/api/dashboard",
+            {
+                headers: {
+                    "Authorization":
+                        `Bearer ${sessionToken}`
+                }
+            }
+        );
 
+        const data = await response.json();
 
-  try {
-
-    const r =
-      await fetch(
-        "/api/dashboard",
-        {
-          headers: {
-            Authorization:
-              "Bearer " +
-              sessionToken
-          }
+        if (!response.ok) {
+            throw new Error(
+                data.detail || "Unable to load dashboard."
+            );
         }
-      );
+
+        renderDashboard(data);
+
+        hide(loginScreen);
+        show(dashboardScreen);
+
+    } catch (error) {
+
+        console.error(error);
+
+        localStorage.removeItem(
+            "toonpay_session"
+        );
+
+        sessionToken = null;
+    }
+}
 
 
-    if (!r.ok) {
+function renderDashboard(data) {
 
-      localStorage.removeItem(
-        "toonpay_demo_session"
-      );
+    const user =
+        data.user || {};
 
-      sessionToken = null;
+    const username =
+        user.username
+            ? `@${user.username}`
+            : "Welcome";
 
-      return showLogin();
+    document.getElementById(
+        "userName"
+    ).textContent = username;
 
+
+    document.getElementById(
+        "balance"
+    ).textContent =
+        data.balance || "0.00";
+
+
+    document.getElementById(
+        "cashback"
+    ).textContent =
+        data.cashback || "0.00";
+
+
+    document.getElementById(
+        "plan"
+    ).textContent =
+        data.plan || "Starter";
+
+
+    document.getElementById(
+        "points"
+    ).textContent =
+        data.points ?? 0;
+
+
+    document.getElementById(
+        "referrals"
+    ).textContent =
+        data.referrals?.count ?? 0;
+
+
+    const transactions =
+        document.getElementById(
+            "transactions"
+        );
+
+    transactions.innerHTML = "";
+
+
+    const list =
+        data.transactions || [];
+
+
+    if (!list.length) {
+
+        transactions.innerHTML = `
+            <div class="empty-state">
+                No recent activity
+            </div>
+        `;
+
+        return;
     }
 
 
-    renderHome(
-      await r.json()
-    );
+    list.forEach(transaction => {
 
+        const row =
+            document.createElement("div");
 
-  } catch (e) {
+        row.className =
+            "transaction-row";
 
-    toast(
-      "Unable to load dashboard."
-    );
-
-  }
-}
-
-
-function nav(active) {
-
-  return `
-    <div class="bottom-nav">
-
-      ${
-        [
-          [
-            "⌂",
-            "Home",
-            "home",
-            "loadDashboard()"
-          ],
-          [
-            "◇",
-            "Plans",
-            "plans",
-            "simple('Plans')"
-          ],
-          [
-            "♣",
-            "Referrals",
-            "referrals",
-            "simple('Referrals')"
-          ],
-          [
-            "⚙",
-            "Settings",
-            "settings",
-            "simple('Settings')"
-          ]
-        ]
-        .map(
-          x =>
-            `
-            <div
-              class="nav-item ${
-                active === x[2]
-                  ? "active"
-                  : ""
-              }"
-              onclick="${x[3]}"
-            >
-
-              <div class="nav-icon">
-                ${x[0]}
-              </div>
-
-              ${x[1]}
-
-            </div>
-            `
-        )
-        .join("")
-      }
-
-    </div>
-  `;
-}
-
-
-function renderHome(d) {
-
-  render(`
-    <div class="screen">
-
-      <div class="topbar">
-
-        <div class="brand">
-          ${logo()}
-          <span>ToonPay</span>
-        </div>
-
-        <div class="icon-button">
-          🔔
-        </div>
-
-      </div>
-
-
-      <div class="dashboard-hero">
-
-        <div class="eyebrow">
-          AVAILABLE BALANCE
-        </div>
-
-        <div class="balance-value">
-          $${esc(d.balance)}
-        </div>
-
-        <div class="currency-chip">
-          USD
-        </div>
-
-      </div>
-
-
-      <div class="action-grid">
-
-        <div
-          class="action-card"
-          onclick="simple('Receive')"
-        >
-
-          <div class="action-icon">
-            ↓
-          </div>
-
-          <span>
-            Receive
-          </span>
-
-        </div>
-
-
-        <div
-          class="action-card"
-          onclick="simple('Details')"
-        >
-
-          <div class="action-icon">
-            ▣
-          </div>
-
-          <span>
-            Details
-          </span>
-
-        </div>
-
-
-        <div
-          class="action-card"
-          onclick="simple('Send')"
-        >
-
-          <div class="action-icon">
-            ➤
-          </div>
-
-          <span>
-            Send
-          </span>
-
-        </div>
-
-      </div>
-
-
-      <div class="dashboard-card">
-
-        <div class="card-head">
-
-          <div class="card-title">
-            Cashback Balance
-          </div>
-
-          <div class="mini-icon">
-            🎁
-          </div>
-
-        </div>
-
-
-        <div class="progress">
-
-          <div
-            class="progress-fill"
-            style="width:${d.points}%"
-          ></div>
-
-        </div>
-
-
-        <div class="points-row">
-
-          <span>
-            Points earned
-          </span>
-
-          <strong>
-            ${d.points}/${d.points_target}
-          </strong>
-
-        </div>
-
-      </div>
-
-
-      <div class="dashboard-card">
-
-        <div class="card-head">
-
-          <div>
-
-            <div class="muted small">
-              CURRENT PLAN
-            </div>
-
-            <div class="plan-name">
-              ${esc(d.plan)}
-            </div>
-
-          </div>
-
-
-          <div class="muted small right">
-
-            Expires
-
-            <br>
-
-            <strong>
-              ${esc(d.plan_expiry)}
-            </strong>
-
-          </div>
-
-        </div>
-
-
-        <div class="manage">
-          Manage plan
-          <span>→</span>
-        </div>
-
-      </div>
-
-
-      <div class="dashboard-card">
-
-        <div class="card-title">
-          Recent activity
-        </div>
-
-
-        ${
-          d.transactions
-            .map(
-              t =>
-                `
-                <div class="transaction">
-
-                  <div class="transaction-left">
-
-                    <div class="transaction-icon">
-                      ${
-                        t.amount.startsWith("+")
-                          ? "↓"
-                          : "↑"
-                      }
-                    </div>
-
-                    <div>
-
-                      <div>
-                        ${esc(t.title)}
-                      </div>
-
-                      <div class="transaction-status">
-                        ${esc(t.status)}
-                      </div>
-
-                    </div>
-
-                  </div>
-
-
-                  <div
-                    class="amount ${
-                      t.amount.startsWith("+")
-                        ? "green"
-                        : ""
-                    }"
-                  >
-                    ${esc(t.amount)}
-                  </div>
-
+        row.innerHTML = `
+            <div class="transaction-info">
+                <div class="transaction-icon">
+                    ${getTransactionIcon(transaction.amount)}
                 </div>
-                `
-            )
-            .join("")
-        }
 
-      </div>
+                <div>
+                    <strong>
+                        ${escapeHtml(transaction.title)}
+                    </strong>
 
+                    <span>
+                        ${escapeHtml(transaction.status)}
+                    </span>
+                </div>
+            </div>
 
-      <div class="demo-footer">
-        Demo dashboard • simulated data only
-      </div>
+            <strong class="transaction-amount">
+                ${escapeHtml(transaction.amount)}
+            </strong>
+        `;
 
-
-      ${nav("home")}
-
-    </div>
-  `);
+        transactions.appendChild(row);
+    });
 }
 
 
-function simple(title) {
+function getTransactionIcon(amount) {
 
-  render(`
-    <div class="screen">
+    if (
+        typeof amount === "string" &&
+        amount.startsWith("+")
+    ) {
+        return "↓";
+    }
 
-      <div class="topbar">
-
-        <div class="brand">
-          ${logo()}
-          <span>ToonPay</span>
-        </div>
-
-        <button
-          class="icon-button"
-          onclick="loadDashboard()"
-        >
-          ←
-        </button>
-
-      </div>
-
-
-      <div class="page-title">
-        ${esc(title)}
-      </div>
-
-
-      <div class="list-card">
-
-        <div class="list-row">
-
-          <span class="muted">
-            Environment
-          </span>
-
-          <strong>
-            Demo
-          </strong>
-
-        </div>
-
-
-        <div class="list-row">
-
-          <span class="muted">
-            Account
-          </span>
-
-          <strong>
-            @${esc(username)}
-          </strong>
-
-        </div>
-
-
-        <div class="list-row">
-
-          <span class="muted">
-            Status
-          </span>
-
-          <strong class="green">
-            Active
-          </strong>
-
-        </div>
-
-      </div>
-
-
-      ${
-        title === "Settings"
-          ? `
-            <button
-              class="primary-button"
-              onclick="logout()"
-            >
-              Log out
-            </button>
-          `
-          : ""
-      }
-
-
-      <div class="demo-footer">
-        Demo environment • simulated data only
-      </div>
-
-
-      ${nav(title.toLowerCase())}
-
-    </div>
-  `);
+    return "↑";
 }
 
+
+/* -------------------------------------------------------
+   LOGOUT
+------------------------------------------------------- */
 
 function logout() {
 
-  sessionToken = null;
+    stopStatusPolling();
 
-  localStorage.removeItem(
-    "toonpay_demo_session"
-  );
+    localStorage.removeItem(
+        "toonpay_session"
+    );
 
-  showLogin();
+    sessionToken = null;
+    requestId = null;
+
+    loginValue.value = "";
+    codeInput.value = "";
+
+    clearMessages();
+
+    show(loginScreen);
+    hide(dashboardScreen);
+
+    show(loginStep);
+    hide(codeStep);
 }
 
 
-if (sessionToken) {
+/* -------------------------------------------------------
+   BACK
+------------------------------------------------------- */
 
-  loadDashboard();
+function goBack() {
 
-} else {
+    stopStatusPolling();
 
-  showLogin();
+    requestId = null;
 
+    codeInput.value = "";
+
+    clearMessages();
+
+    show(loginStep);
+    hide(codeStep);
+}
+
+
+/* -------------------------------------------------------
+   HTML ESCAPE
+------------------------------------------------------- */
+
+function escapeHtml(value) {
+
+    const div =
+        document.createElement("div");
+
+    div.textContent =
+        String(value ?? "");
+
+    return div.innerHTML;
+}
+
+
+/* -------------------------------------------------------
+   EVENTS
+------------------------------------------------------- */
+
+sendCodeButton.addEventListener(
+    "click",
+    requestLogin
+);
+
+
+verifyButton.addEventListener(
+    "click",
+    verifyCode
+);
+
+
+backButton.addEventListener(
+    "click",
+    goBack
+);
+
+
+logoutButton.addEventListener(
+    "click",
+    logout
+);
+
+
+loginValue.addEventListener(
+    "keydown",
+    event => {
+
+        if (event.key === "Enter") {
+            requestLogin();
+        }
+
+    }
+);
+
+
+codeInput.addEventListener(
+    "input",
+    () => {
+
+        codeInput.value =
+            codeInput.value
+                .replace(/\D/g, "")
+                .slice(0, 6);
+
+    }
+);
+
+
+codeInput.addEventListener(
+    "keydown",
+    event => {
+
+        if (event.key === "Enter") {
+            verifyCode();
+        }
+
+    }
+);
+
+
+/* -------------------------------------------------------
+   RESTORE SESSION
+------------------------------------------------------- */
+
+const savedSession =
+    localStorage.getItem(
+        "toonpay_session"
+    );
+
+
+if (savedSession) {
+
+    sessionToken =
+        savedSession;
+
+    loadDashboard();
 }
