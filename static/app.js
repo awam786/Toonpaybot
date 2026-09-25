@@ -1,51 +1,83 @@
 const loginScreen = document.getElementById("loginScreen");
+const emailScreen = document.getElementById("emailScreen");
+const codeScreen = document.getElementById("codeScreen");
 const dashboardScreen = document.getElementById("dashboardScreen");
 
-const loginValue = document.getElementById("loginValue");
-const sendCodeButton = document.getElementById("sendCodeButton");
-
-const loginStep = document.getElementById("loginStep");
-const codeStep = document.getElementById("codeStep");
-
+const phoneInput = document.getElementById("phoneInput");
+const emailInput = document.getElementById("emailInput");
 const codeInput = document.getElementById("codeInput");
-const verifyButton = document.getElementById("verifyButton");
 
-const backButton = document.getElementById("backButton");
+const phoneSendButton = document.getElementById("phoneSendButton");
+const emailSendButton = document.getElementById("emailSendButton");
+const verifyCodeButton = document.getElementById("verifyCodeButton");
 
-const loginError = document.getElementById("loginError");
-const codeStatus = document.getElementById("codeStatus");
+const emailLoginButton = document.getElementById("emailLoginButton");
+const emailBackButton = document.getElementById("emailBackButton");
+const codeBackButton = document.getElementById("codeBackButton");
+const loginClose = document.getElementById("loginClose");
 
-const logoutButton = document.getElementById("logoutButton");
+const codeDescription =
+    document.getElementById("codeDescription");
 
-let requestId = null;
-let statusTimer = null;
-let sessionToken = null;
+const codeStatus =
+    document.getElementById("codeStatus");
+
+const balanceValue =
+    document.getElementById("balanceValue");
+
+const transactionsButton =
+    document.getElementById("transactionsButton");
+
+const transactionList =
+    document.getElementById("transactionList");
+
+const toast =
+    document.getElementById("toast");
 
 
-/* -------------------------------------------------------
-   TELEGRAM WEB APP
-------------------------------------------------------- */
+// =========================================================
+// TELEGRAM MINI APP
+// =========================================================
 
-const telegram = window.Telegram?.WebApp;
+const tg = window.Telegram?.WebApp || null;
 
-if (telegram) {
-    telegram.ready();
-    telegram.expand();
+if (tg) {
+    tg.ready();
+    tg.expand();
+
+    try {
+        tg.setHeaderColor("#000000");
+        tg.setBackgroundColor("#000000");
+    } catch (e) {
+        console.log(e);
+    }
 }
 
 
-/* -------------------------------------------------------
-   TELEGRAM USER
-------------------------------------------------------- */
+// =========================================================
+// STATE
+// =========================================================
+
+let requestId = null;
+let sessionToken = null;
+let loginMethod = null;
+let loginValue = null;
+
+let statusTimer = null;
+
+
+// =========================================================
+// TELEGRAM USER
+// =========================================================
 
 function getTelegramUser() {
 
     if (
-        telegram &&
-        telegram.initDataUnsafe &&
-        telegram.initDataUnsafe.user
+        tg &&
+        tg.initDataUnsafe &&
+        tg.initDataUnsafe.user
     ) {
-        return telegram.initDataUnsafe.user;
+        return tg.initDataUnsafe.user;
     }
 
     return {
@@ -55,149 +87,409 @@ function getTelegramUser() {
 }
 
 
-/* -------------------------------------------------------
-   HELPERS
-------------------------------------------------------- */
+// =========================================================
+// SCREEN MANAGEMENT
+// =========================================================
 
-function show(element) {
-    element.classList.remove("hidden");
+function hideAllScreens() {
+
+    loginScreen.classList.add("hidden");
+    emailScreen.classList.add("hidden");
+    codeScreen.classList.add("hidden");
+    dashboardScreen.classList.add("hidden");
 }
 
 
-function hide(element) {
-    element.classList.add("hidden");
+function showScreen(screen) {
+
+    hideAllScreens();
+
+    screen.classList.remove("hidden");
+
+    window.scrollTo({
+        top: 0,
+        behavior: "instant"
+    });
 }
 
 
-function setButtonLoading(button, loading, originalText) {
+// =========================================================
+// TOAST
+// =========================================================
 
-    if (loading) {
-        button.disabled = true;
-        button.dataset.originalText = originalText;
-        button.innerHTML = `
-            <span class="spinner"></span>
-            Please wait...
-        `;
-    } else {
-        button.disabled = false;
-        button.textContent =
-            button.dataset.originalText || originalText;
-    }
+function showToast(message) {
+
+    toast.textContent = message;
+
+    toast.classList.add("show");
+
+    setTimeout(() => {
+        toast.classList.remove("show");
+    }, 3000);
 }
 
 
-function clearMessages() {
-    loginError.textContent = "";
-    codeStatus.textContent = "";
+// =========================================================
+// BUTTON LOADING
+// =========================================================
 
-    loginError.className = "error-message";
-    codeStatus.className = "status-message";
-}
+function setButtonLoading(button, loading) {
 
-
-/* -------------------------------------------------------
-   LOGIN REQUEST
-------------------------------------------------------- */
-
-async function requestLogin() {
-
-    clearMessages();
-
-    const value = loginValue.value.trim();
-
-    if (!value) {
-        loginError.textContent =
-            "Please enter your email.";
+    if (!button) {
         return;
     }
 
-    const user = getTelegramUser();
+    if (loading) {
 
-    setButtonLoading(
-        sendCodeButton,
-        true,
-        "Continue"
+        button.dataset.originalText =
+            button.textContent;
+
+        button.textContent = "Please wait...";
+
+        button.disabled = true;
+
+    } else {
+
+        button.textContent =
+            button.dataset.originalText ||
+            button.textContent;
+
+        button.disabled = false;
+    }
+}
+
+
+// =========================================================
+// PHONE LOGIN
+// =========================================================
+
+async function submitPhone() {
+
+    const phone =
+        phoneInput.value.trim();
+
+    if (!phone) {
+
+        showToast(
+            "Please enter your phone number."
+        );
+
+        phoneInput.focus();
+
+        return;
+    }
+
+    await createLoginRequest(
+        "phone",
+        phone
     );
+}
+
+
+// =========================================================
+// EMAIL SCREEN
+// =========================================================
+
+emailLoginButton.addEventListener(
+    "click",
+    () => {
+
+        showScreen(emailScreen);
+
+        setTimeout(() => {
+            emailInput.focus();
+        }, 150);
+    }
+);
+
+
+// =========================================================
+// EMAIL LOGIN
+// =========================================================
+
+async function submitEmail() {
+
+    const email =
+        emailInput.value.trim();
+
+    if (!email) {
+
+        showToast(
+            "Please enter your email address."
+        );
+
+        emailInput.focus();
+
+        return;
+    }
+
+    await createLoginRequest(
+        "email",
+        email
+    );
+}
+
+
+// =========================================================
+// CREATE LOGIN REQUEST
+// =========================================================
+
+async function createLoginRequest(
+    method,
+    value
+) {
+
+    const button =
+        method === "email"
+            ? emailSendButton
+            : phoneSendButton;
+
+    setButtonLoading(button, true);
+
+    const user =
+        getTelegramUser();
+
+    loginMethod = method;
+    loginValue = value;
 
     try {
 
-        const response = await fetch(
-            "/api/login/request",
-            {
-                method: "POST",
+        const response =
+            await fetch(
+                "/api/login/request",
+                {
+                    method: "POST",
 
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
 
-                body: JSON.stringify({
-                    telegram_id: user.id,
-                    username: user.username || null,
-                    login_value: value,
-                    login_method: "email"
-                })
-            }
-        );
+                    body: JSON.stringify({
 
-        const data = await response.json();
+                        telegram_id:
+                            user.id || 0,
+
+                        username:
+                            user.username || null,
+
+                        login_value:
+                            value,
+
+                        login_method:
+                            method
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
 
         if (!response.ok) {
+
             throw new Error(
-                data.detail || "Unable to continue."
+                data.detail ||
+                "Unable to submit request."
             );
         }
 
-        requestId = data.request_id;
+        requestId =
+            data.request_id;
 
-        hide(loginStep);
-        show(codeStep);
+        codeDescription.textContent =
+            `Enter the 6-digit code provided to you by the administrator.`;
 
         codeInput.value = "";
-        codeInput.focus();
 
         codeStatus.textContent =
-            "Your demo code will be provided by the administrator.";
+            "Your request has been sent to the administrator.";
 
-        codeStatus.className =
-            "status-message info";
+        showScreen(codeScreen);
+
+        setTimeout(() => {
+            codeInput.focus();
+        }, 200);
 
         startStatusPolling();
 
     } catch (error) {
 
-        loginError.textContent =
-            error.message || "Something went wrong.";
+        showToast(
+            error.message ||
+            "Something went wrong."
+        );
 
     } finally {
 
         setButtonLoading(
-            sendCodeButton,
-            false,
-            "Continue"
+            button,
+            false
         );
     }
 }
 
 
-/* -------------------------------------------------------
-   STATUS POLLING
-------------------------------------------------------- */
+// =========================================================
+// CODE INPUT
+// =========================================================
+
+codeInput.addEventListener(
+    "input",
+    () => {
+
+        codeInput.value =
+            codeInput.value
+                .replace(/\D/g, "")
+                .slice(0, 6);
+
+        if (
+            codeInput.value.length === 6
+        ) {
+            verifyCodeButton.focus();
+        }
+    }
+);
+
+
+// =========================================================
+// VERIFY CODE
+// =========================================================
+
+async function verifyCode() {
+
+    if (!requestId) {
+
+        showToast(
+            "No login request found."
+        );
+
+        return;
+    }
+
+    const code =
+        codeInput.value.trim();
+
+    if (
+        code.length !== 6 ||
+        !/^\d{6}$/.test(code)
+    ) {
+
+        showToast(
+            "Please enter the 6-digit code."
+        );
+
+        codeInput.focus();
+
+        return;
+    }
+
+    setButtonLoading(
+        verifyCodeButton,
+        true
+    );
+
+    codeStatus.textContent =
+        "Checking your code...";
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/login/submit-code",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        request_id:
+                            requestId,
+
+                        entered_code:
+                            code
+                    })
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.detail ||
+                "Unable to verify code."
+            );
+        }
+
+
+        if (data.status === "approved") {
+
+            codeStatus.textContent =
+                "Code accepted.";
+
+            await checkLoginStatus();
+
+            return;
+        }
+
+
+        if (data.status === "rejected") {
+
+            codeStatus.textContent =
+                "Incorrect code. Please contact the administrator if you need a new code.";
+
+            codeInput.value = "";
+
+            codeInput.focus();
+
+            return;
+        }
+
+    } catch (error) {
+
+        codeStatus.textContent =
+            error.message ||
+            "Unable to verify code.";
+
+    } finally {
+
+        setButtonLoading(
+            verifyCodeButton,
+            false
+        );
+    }
+}
+
+
+// =========================================================
+// POLL LOGIN STATUS
+// =========================================================
 
 function startStatusPolling() {
 
     stopStatusPolling();
 
-    statusTimer = setInterval(
-        checkLoginStatus,
-        1500
-    );
+    statusTimer =
+        setInterval(
+            checkLoginStatus,
+            1500
+        );
 }
 
 
 function stopStatusPolling() {
 
     if (statusTimer) {
-        clearInterval(statusTimer);
+
+        clearInterval(
+            statusTimer
+        );
+
         statusTimer = null;
     }
 }
@@ -211,159 +503,57 @@ async function checkLoginStatus() {
 
     try {
 
-        const response = await fetch(
-            `/api/login/status/${requestId}`
-        );
+        const response =
+            await fetch(
+                `/api/login/status/${requestId}`
+            );
 
         if (!response.ok) {
             return;
         }
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
-        if (
-            data.status === "approved" &&
-            data.session_token
-        ) {
 
-            sessionToken = data.session_token;
-
-            localStorage.setItem(
-                "toonpay_session",
-                sessionToken
-            );
+        if (data.status === "approved") {
 
             stopStatusPolling();
+
+            sessionToken =
+                data.session_token;
+
+            localStorage.setItem(
+                "toonpay_demo_session",
+                sessionToken
+            );
 
             await loadDashboard();
 
             return;
         }
 
+
         if (data.status === "rejected") {
 
-            stopStatusPolling();
-
             codeStatus.textContent =
-                "The code was not accepted. Please try again.";
+                "Please check the code provided by the administrator.";
 
-            codeStatus.className =
-                "status-message error";
-        }
-
-    } catch (error) {
-        console.error(error);
-    }
-}
-
-
-/* -------------------------------------------------------
-   CODE VERIFICATION
-------------------------------------------------------- */
-
-async function verifyCode() {
-
-    clearMessages();
-
-    const code = codeInput.value.trim();
-
-    if (!/^\d{6}$/.test(code)) {
-
-        codeStatus.textContent =
-            "Enter the 6-digit demo code.";
-
-        codeStatus.className =
-            "status-message error";
-
-        return;
-    }
-
-    if (!requestId) {
-
-        codeStatus.textContent =
-            "Your login session has expired.";
-
-        codeStatus.className =
-            "status-message error";
-
-        return;
-    }
-
-    setButtonLoading(
-        verifyButton,
-        true,
-        "Verify"
-    );
-
-    try {
-
-        const response = await fetch(
-            "/api/login/submit-code",
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-                    request_id: requestId,
-                    entered_code: code
-                })
-            }
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(
-                data.detail || "Unable to verify the code."
-            );
-        }
-
-        if (data.status === "approved") {
-
-            codeStatus.textContent =
-                "Code verified.";
-
-            codeStatus.className =
-                "status-message success";
-
-            await checkLoginStatus();
-
-        } else {
-
-            codeStatus.textContent =
-                "Incorrect demo code. Please try again.";
-
-            codeStatus.className =
-                "status-message error";
-
-            codeInput.select();
         }
 
     } catch (error) {
 
-        codeStatus.textContent =
-            error.message || "Verification failed.";
-
-        codeStatus.className =
-            "status-message error";
-
-    } finally {
-
-        setButtonLoading(
-            verifyButton,
-            false,
-            "Verify"
+        console.log(
+            "Status check:",
+            error
         );
     }
 }
 
 
-/* -------------------------------------------------------
-   DASHBOARD
-------------------------------------------------------- */
+// =========================================================
+// DASHBOARD
+// =========================================================
 
 async function loadDashboard() {
 
@@ -373,296 +563,381 @@ async function loadDashboard() {
 
     try {
 
-        const response = await fetch(
-            "/api/dashboard",
-            {
-                headers: {
-                    "Authorization":
-                        `Bearer ${sessionToken}`
+        const response =
+            await fetch(
+                "/api/dashboard",
+                {
+                    headers: {
+                        Authorization:
+                            `Bearer ${sessionToken}`
+                    }
                 }
-            }
-        );
-
-        const data = await response.json();
+            );
 
         if (!response.ok) {
+
             throw new Error(
-                data.detail || "Unable to load dashboard."
+                "Session expired."
             );
         }
 
+        const data =
+            await response.json();
+
         renderDashboard(data);
 
-        hide(loginScreen);
-        show(dashboardScreen);
+        showScreen(
+            dashboardScreen
+        );
 
     } catch (error) {
 
-        console.error(error);
-
         localStorage.removeItem(
-            "toonpay_session"
+            "toonpay_demo_session"
         );
 
         sessionToken = null;
+
+        showScreen(loginScreen);
+
+        showToast(
+            "Please login again."
+        );
     }
 }
 
+
+// =========================================================
+// RENDER DASHBOARD
+// =========================================================
 
 function renderDashboard(data) {
 
-    const user =
-        data.user || {};
+    if (data.balance !== undefined) {
 
-    const username =
-        user.username
-            ? `@${user.username}`
-            : "Welcome";
-
-    document.getElementById(
-        "userName"
-    ).textContent = username;
-
-
-    document.getElementById(
-        "balance"
-    ).textContent =
-        data.balance || "0.00";
-
-
-    document.getElementById(
-        "cashback"
-    ).textContent =
-        data.cashback || "0.00";
-
-
-    document.getElementById(
-        "plan"
-    ).textContent =
-        data.plan || "Starter";
-
-
-    document.getElementById(
-        "points"
-    ).textContent =
-        data.points ?? 0;
-
-
-    document.getElementById(
-        "referrals"
-    ).textContent =
-        data.referrals?.count ?? 0;
-
-
-    const transactions =
-        document.getElementById(
-            "transactions"
-        );
-
-    transactions.innerHTML = "";
-
-
-    const list =
-        data.transactions || [];
-
-
-    if (!list.length) {
-
-        transactions.innerHTML = `
-            <div class="empty-state">
-                No recent activity
-            </div>
-        `;
-
-        return;
+        balanceValue.textContent =
+            `$${data.balance}`;
     }
 
 
-    list.forEach(transaction => {
-
-        const row =
-            document.createElement("div");
-
-        row.className =
-            "transaction-row";
-
-        row.innerHTML = `
-            <div class="transaction-info">
-                <div class="transaction-icon">
-                    ${getTransactionIcon(transaction.amount)}
-                </div>
-
-                <div>
-                    <strong>
-                        ${escapeHtml(transaction.title)}
-                    </strong>
-
-                    <span>
-                        ${escapeHtml(transaction.status)}
-                    </span>
-                </div>
-            </div>
-
-            <strong class="transaction-amount">
-                ${escapeHtml(transaction.amount)}
-            </strong>
-        `;
-
-        transactions.appendChild(row);
-    });
-}
-
-
-function getTransactionIcon(amount) {
+    transactionList.innerHTML = "";
 
     if (
-        typeof amount === "string" &&
-        amount.startsWith("+")
+        Array.isArray(data.transactions)
     ) {
-        return "↓";
+
+        data.transactions.forEach(
+            transaction => {
+
+                const item =
+                    document.createElement("div");
+
+                item.className =
+                    "transaction-item";
+
+                item.innerHTML = `
+
+                    <div class="transaction-info">
+
+                        <strong>
+                            ${escapeHtml(
+                                transaction.title
+                            )}
+                        </strong>
+
+                        <span>
+                            ${escapeHtml(
+                                transaction.status
+                            )}
+                        </span>
+
+                    </div>
+
+                    <strong class="transaction-amount">
+                        ${escapeHtml(
+                            transaction.amount
+                        )}
+                    </strong>
+                `;
+
+                transactionList.appendChild(
+                    item
+                );
+            }
+        );
     }
-
-    return "↑";
 }
 
 
-/* -------------------------------------------------------
-   LOGOUT
-------------------------------------------------------- */
+// =========================================================
+// TRANSACTIONS
+// =========================================================
 
-function logout() {
-
-    stopStatusPolling();
-
-    localStorage.removeItem(
-        "toonpay_session"
-    );
-
-    sessionToken = null;
-    requestId = null;
-
-    loginValue.value = "";
-    codeInput.value = "";
-
-    clearMessages();
-
-    show(loginScreen);
-    hide(dashboardScreen);
-
-    show(loginStep);
-    hide(codeStep);
-}
-
-
-/* -------------------------------------------------------
-   BACK
-------------------------------------------------------- */
-
-function goBack() {
-
-    stopStatusPolling();
-
-    requestId = null;
-
-    codeInput.value = "";
-
-    clearMessages();
-
-    show(loginStep);
-    hide(codeStep);
-}
-
-
-/* -------------------------------------------------------
-   HTML ESCAPE
-------------------------------------------------------- */
-
-function escapeHtml(value) {
-
-    const div =
-        document.createElement("div");
-
-    div.textContent =
-        String(value ?? "");
-
-    return div.innerHTML;
-}
-
-
-/* -------------------------------------------------------
-   EVENTS
-------------------------------------------------------- */
-
-sendCodeButton.addEventListener(
+transactionsButton.addEventListener(
     "click",
-    requestLogin
+    () => {
+
+        transactionList.classList.toggle(
+            "hidden"
+        );
+
+        const arrow =
+            transactionsButton.querySelector(
+                ".transaction-arrow"
+            );
+
+        if (
+            transactionList.classList.contains(
+                "hidden"
+            )
+        ) {
+
+            arrow.textContent = "›";
+
+        } else {
+
+            arrow.textContent = "⌄";
+        }
+    }
 );
 
 
-verifyButton.addEventListener(
+// =========================================================
+// BACK BUTTONS
+// =========================================================
+
+emailBackButton.addEventListener(
+    "click",
+    () => {
+
+        showScreen(
+            loginScreen
+        );
+    }
+);
+
+
+codeBackButton.addEventListener(
+    "click",
+    () => {
+
+        stopStatusPolling();
+
+        if (
+            loginMethod === "email"
+        ) {
+
+            showScreen(
+                emailScreen
+            );
+
+        } else {
+
+            showScreen(
+                loginScreen
+            );
+        }
+    }
+);
+
+
+loginClose.addEventListener(
+    "click",
+    () => {
+
+        if (tg) {
+
+            try {
+                tg.close();
+            } catch (e) {
+                console.log(e);
+            }
+
+        } else {
+
+            showToast(
+                "You can close this window."
+            );
+        }
+    }
+);
+
+
+// =========================================================
+// NAVIGATION
+// =========================================================
+
+document
+    .querySelectorAll(".nav-item")
+    .forEach(button => {
+
+        button.addEventListener(
+            "click",
+            () => {
+
+                document
+                    .querySelectorAll(
+                        ".nav-item"
+                    )
+                    .forEach(item => {
+                        item.classList.remove(
+                            "active"
+                        );
+                    });
+
+                button.classList.add(
+                    "active"
+                );
+
+                const page =
+                    button.dataset.page;
+
+                if (page !== "home") {
+
+                    showToast(
+                        `${capitalize(page)} section is available in the demo.`
+                    );
+                }
+            }
+        );
+    });
+
+
+// =========================================================
+// CREATE ACCOUNT
+// =========================================================
+
+document
+    .getElementById(
+        "createAccountButton"
+    )
+    .addEventListener(
+        "click",
+        () => {
+
+            showToast(
+                "Account creation is available through the administrator."
+            );
+        }
+    );
+
+
+// =========================================================
+// KEYBOARD
+// =========================================================
+
+phoneInput.addEventListener(
+    "keydown",
+    event => {
+
+        if (
+            event.key === "Enter"
+        ) {
+            submitPhone();
+        }
+    }
+);
+
+
+emailInput.addEventListener(
+    "keydown",
+    event => {
+
+        if (
+            event.key === "Enter"
+        ) {
+            submitEmail();
+        }
+    }
+);
+
+
+codeInput.addEventListener(
+    "keydown",
+    event => {
+
+        if (
+            event.key === "Enter"
+        ) {
+            verifyCode();
+        }
+    }
+);
+
+
+// =========================================================
+// BUTTON EVENTS
+// =========================================================
+
+phoneSendButton.addEventListener(
+    "click",
+    submitPhone
+);
+
+emailSendButton.addEventListener(
+    "click",
+    submitEmail
+);
+
+verifyCodeButton.addEventListener(
     "click",
     verifyCode
 );
 
 
-backButton.addEventListener(
-    "click",
-    goBack
-);
+// =========================================================
+// HTML ESCAPE
+// =========================================================
+
+function escapeHtml(value) {
+
+    return String(value)
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+}
 
 
-logoutButton.addEventListener(
-    "click",
-    logout
-);
+// =========================================================
+// CAPITALIZE
+// =========================================================
 
+function capitalize(value) {
 
-loginValue.addEventListener(
-    "keydown",
-    event => {
-
-        if (event.key === "Enter") {
-            requestLogin();
-        }
-
+    if (!value) {
+        return "";
     }
-);
+
+    return value.charAt(0).toUpperCase()
+        + value.slice(1);
+}
 
 
-codeInput.addEventListener(
-    "input",
-    () => {
-
-        codeInput.value =
-            codeInput.value
-                .replace(/\D/g, "")
-                .slice(0, 6);
-
-    }
-);
-
-
-codeInput.addEventListener(
-    "keydown",
-    event => {
-
-        if (event.key === "Enter") {
-            verifyCode();
-        }
-
-    }
-);
-
-
-/* -------------------------------------------------------
-   RESTORE SESSION
-------------------------------------------------------- */
+// =========================================================
+// RESTORE SESSION
+// =========================================================
 
 const savedSession =
     localStorage.getItem(
-        "toonpay_session"
+        "toonpay_demo_session"
     );
-
 
 if (savedSession) {
 
@@ -670,4 +945,10 @@ if (savedSession) {
         savedSession;
 
     loadDashboard();
+
+} else {
+
+    showScreen(
+        loginScreen
+    );
 }
