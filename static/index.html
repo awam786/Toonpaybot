@@ -1,41 +1,276 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-
 <head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    >
 
-  <meta charset="utf-8">
+    <title>ToonPay</title>
 
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"
-  >
-
-  <meta
-    name="theme-color"
-    content="#0b0b0d"
-  >
-
-  <title>ToonPay</title>
-
-  <link
-    rel="stylesheet"
-    href="/style.css"
-  >
-
+    <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
 
-  <div id="app"></div>
+<div class="app-shell">
 
-  <script
-    src="https://telegram.org/js/telegram-web-app.js"
-  ></script>
+    <!-- LOGIN SCREEN -->
+    <main id="loginScreen" class="screen">
 
-  <script
-    src="/app.js"
-  ></script>
+        <div class="brand">
+            <img
+                src="/logo.png"
+                class="logo"
+                alt="ToonPay"
+            >
+
+            <div class="brand-name">ToonPay</div>
+        </div>
+
+        <section class="login-card">
+
+            <div class="welcome">
+                <h1>Welcome back</h1>
+                <p>
+                    Sign in to continue to your ToonPay account.
+                </p>
+            </div>
+
+            <div class="demo-note">
+                <span class="demo-icon">ⓘ</span>
+                <span>This is a demo account for testing purposes.</span>
+            </div>
+
+            <div id="loginStep">
+
+                <div class="field-group">
+
+                    <label for="loginValue">
+                        Email
+                    </label>
+
+                    <input
+                        id="loginValue"
+                        type="email"
+                        inputmode="email"
+                        autocomplete="off"
+                        placeholder="Enter your email"
+                        maxlength="160"
+                    >
+
+                </div>
+
+                <button
+                    id="sendCodeButton"
+                    class="primary-button"
+                    type="button"
+                >
+                    Continue
+                </button>
+
+                <p id="loginError" class="error-message"></p>
+
+            </div>
+
+
+            <div id="codeStep" class="hidden">
+
+                <div class="code-header">
+
+                    <button
+                        id="backButton"
+                        class="back-button"
+                        type="button"
+                    >
+                        ←
+                    </button>
+
+                    <div>
+                        <h2>Enter your code</h2>
+
+                        <p>
+                            Enter the 6-digit demo code provided to you.
+                        </p>
+                    </div>
+
+                </div>
+
+                <div class="field-group">
+
+                    <label for="codeInput">
+                        Verification code
+                    </label>
+
+                    <input
+                        id="codeInput"
+                        class="code-input"
+                        type="text"
+                        inputmode="numeric"
+                        autocomplete="one-time-code"
+                        maxlength="6"
+                        placeholder="000000"
+                    >
+
+                </div>
+
+                <button
+                    id="verifyButton"
+                    class="primary-button"
+                    type="button"
+                >
+                    Verify
+                </button>
+
+                <p id="codeStatus" class="status-message"></p>
+
+            </div>
+
+        </section>
+
+        <div class="secure-footer">
+            <span>🔒</span>
+            <span>Secure demo environment</span>
+        </div>
+
+    </main>
+
+
+    <!-- DASHBOARD -->
+    <main id="dashboardScreen" class="screen hidden">
+
+        <header class="dashboard-header">
+
+            <div class="dashboard-brand">
+
+                <img
+                    src="/logo.png"
+                    class="dashboard-logo"
+                    alt="ToonPay"
+                >
+
+                <span>ToonPay</span>
+
+            </div>
+
+            <button
+                id="logoutButton"
+                class="logout-button"
+                type="button"
+            >
+                Logout
+            </button>
+
+        </header>
+
+
+        <section class="dashboard-content">
+
+            <div class="greeting">
+                <span>Good to see you</span>
+                <h1 id="userName">Welcome</h1>
+            </div>
+
+
+            <div class="balance-card">
+
+                <div class="balance-top">
+
+                    <span>Available balance</span>
+
+                    <span class="balance-currency">
+                        USD
+                    </span>
+
+                </div>
+
+                <div class="balance-amount">
+                    $<span id="balance">0.00</span>
+                </div>
+
+                <div class="balance-bottom">
+
+                    <span>
+                        Cashback
+                    </span>
+
+                    <strong>
+                        $<span id="cashback">0.00</span>
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <div class="stats-grid">
+
+                <div class="stat-card">
+
+                    <span class="stat-label">
+                        Plan
+                    </span>
+
+                    <strong id="plan">
+                        Starter
+                    </strong>
+
+                </div>
+
+                <div class="stat-card">
+
+                    <span class="stat-label">
+                        Points
+                    </span>
+
+                    <strong id="points">
+                        0
+                    </strong>
+
+                </div>
+
+                <div class="stat-card">
+
+                    <span class="stat-label">
+                        Referrals
+                    </span>
+
+                    <strong id="referrals">
+                        0
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <section class="dashboard-section">
+
+                <div class="section-heading">
+                    <h2>Recent activity</h2>
+                </div>
+
+                <div
+                    id="transactions"
+                    class="transactions"
+                ></div>
+
+            </section>
+
+
+            <div class="demo-dashboard-label">
+                Demo account
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<script src="/app.js"></script>
 
 </body>
-
 </html>
