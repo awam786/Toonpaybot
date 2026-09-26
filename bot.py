@@ -30,35 +30,28 @@ def _user_meta(update: Update):
 
 
 async def _log(tg_id, username, first_name, action, detail=""):
-    """Call backend to log an activity."""
+    """Send an activity log to the backend with the correct action name."""
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             await client.post(
-                f"{BACKEND_URL}/api/log-opened",
+                f"{BACKEND_URL}/api/log-activity",
                 json={
                     "telegram_id": tg_id,
                     "username": username,
                     "first_name": first_name,
+                    "action": action,
+                    "detail": detail,
                 },
             )
-    except Exception:
-        pass
+    except Exception as e:
+        print("log failed:", e)
 
 
 # ---------- /start ----------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id, username, first_name = _user_meta(update)
-
-    # Log /start
-    try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            await client.post(
-                f"{BACKEND_URL}/api/log-opened",
-                json={"telegram_id": tg_id, "username": username, "first_name": first_name},
-            )
-    except Exception as e:
-        print("log failed:", e)
+    await _log(tg_id, username, first_name, "/start", "opened bot")
 
     kb = InlineKeyboardMarkup(
         [[InlineKeyboardButton("Open ToonPay 🚀", web_app=WebAppInfo(url=APP_URL))]]
@@ -76,6 +69,10 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         await update.message.reply_text("⛔ Not authorized.")
         return
+
+    tg_id, username, first_name = _user_meta(update)
+    await _log(tg_id, username, first_name, "/admin", "opened admin panel")
+
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(f"{BACKEND_URL}/api/admin/pending")
         data = r.json().get("requests", [])
@@ -96,7 +93,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ---------- /status (NEW) ----------
+# ---------- /status ----------
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -175,7 +172,6 @@ async def show_user_detail(chat_id, telegram_id, context: ContextTypes.DEFAULT_T
         detail = a.get("detail") or ""
         lines.append(f"• {ts} — {a['action']}" + (f" — {detail}" if detail else ""))
 
-    # Telegram max ~4096 chars per message — split if needed
     text = "\n".join(lines)
     chunks = [text[i:i + 3800] for i in range(0, len(text), 3800)]
     for chunk in chunks:
@@ -192,7 +188,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = query.data or ""
 
-    # --- /status list controls ---
     if data == "refresh_users":
         await send_users_list(query.message.chat_id, context)
         return
@@ -202,7 +197,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_user_detail(query.message.chat_id, tg_id, context)
         return
 
-    # --- assign / approve / reject ---
     action, _, req_id_s = data.partition(":")
     if not req_id_s.isdigit():
         return
