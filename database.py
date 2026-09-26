@@ -39,6 +39,7 @@ def init_db():
             created_at INTEGER NOT NULL,
             decided_at INTEGER
         );
+
         CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
             telegram_id INTEGER,
@@ -46,8 +47,23 @@ def init_db():
             created_at INTEGER NOT NULL,
             expires_at INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS activity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER,
+            username TEXT,
+            first_name TEXT,
+            action TEXT NOT NULL,
+            detail TEXT,
+            created_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_activity_tg
+            ON activity_log (telegram_id, created_at DESC);
         """)
 
+
+# ---------- OTP requests ----------
 
 def create_request(telegram_id, username, first_name, identifier):
     with db() as c:
@@ -69,7 +85,7 @@ def get_request(req_id):
 def get_pending_requests():
     with db() as c:
         rows = c.execute(
-            "SELECT * FROM otp_requests WHERE status != 'approved' AND status != 'rejected' ORDER BY id DESC LIMIT 30"
+            "SELECT * FROM otp_requests WHERE status NOT IN ('approved','rejected') ORDER BY id DESC LIMIT 30"
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -99,6 +115,8 @@ def set_decision(req_id, decision):
         )
 
 
+# ---------- Sessions ----------
+
 def create_session(telegram_id, identifier):
     token = secrets.token_urlsafe(32)
     now = int(time.time())
@@ -118,3 +136,64 @@ def get_session(token):
         if row["expires_at"] < int(time.time()):
             return None
         return dict(row)
+
+
+# ---------- Activity Log ----------
+
+def log_activity(telegram_id, username, first_name, action, detail=""):
+    with db() as c:
+        c.execute(
+            """INSERT INTO activity_log
+            (telegram_id, username, first_name, action, detail, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (telegram_id, username or "", first_name or "", action, detail, int(time.time())),
+        )
+
+
+def get_all_users():
+    """Return each unique user with first/last seen + count."""
+    with db() as c:
+        rows = c.execute("""
+            SELECT
+                telegram_id,
+                MAX(username)   AS username,
+                MAX(first_name) AS first_name,
+                MIN(created_at) AS first_seen,
+                MAX(created_at) AS last_seen,
+                COUNT(*)        AS total_actions
+            FROM activity_log
+            WHERE telegram_id IS NOT NULL
+            GROUP BY telegram_id
+            ORDER BY last_seen DESC
+            LIMIT 50
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_user_activity(telegram_id, limit=30):
+    with db() as c:
+        rows = c.execute(
+            """SELECT * FROM activity_log
+               WHERE telegram_id = ?
+               ORDER BY created_at DESC
+               LIMIT ?""",
+            (telegram_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_user_summary(telegram_id):
+    with db() as c:
+        row = c.execute("""
+            SELECT
+                telegram_id,
+                MAX(username)   AS username,
+                MAX(first_name) AS first_name,
+                MIN(created_at) AS first_seen,
+                MAX(created_at) AS last_seen,
+                COUNT(*)        AS total_actions
+            FROM activity_log
+            WHERE telegram_id = ?
+            GROUP BY telegram_id
+        """, (telegram_id,)).fetchone()
+        return dict(row) if row else None
