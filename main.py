@@ -43,7 +43,9 @@ def logo():
     return FileResponse(os.path.join(STATIC_DIR, "logo.png"))
 
 
-# ---------- User OTP flow ----------
+# ==========================================================
+# USER OTP FLOW
+# ==========================================================
 
 class OTPRequestIn(BaseModel):
     identifier: str
@@ -62,7 +64,6 @@ async def request_otp(payload: OTPRequestIn):
         payload.telegram_id, payload.username or "", payload.first_name or "", identifier
     )
 
-    # LOG
     db.log_activity(
         payload.telegram_id,
         payload.username,
@@ -92,7 +93,6 @@ async def submit_otp(payload: SubmitOTPIn):
 
     db.set_entered_otp(payload.request_id, otp)
 
-    # LOG
     db.log_activity(
         req.get("telegram_id"),
         req.get("username"),
@@ -131,7 +131,9 @@ def me(token: str):
     return {"identifier": s["identifier"], "telegram_id": s["telegram_id"]}
 
 
-# ---------- Mini App "opened" logging ----------
+# ==========================================================
+# ACTIVITY LOG ENDPOINTS
+# ==========================================================
 
 class OpenedIn(BaseModel):
     telegram_id: int | None = None
@@ -151,7 +153,29 @@ def log_opened(payload: OpenedIn):
     return {"ok": True}
 
 
-# ---------- Admin API ----------
+class LogActivityIn(BaseModel):
+    telegram_id: int | None = None
+    username: str | None = None
+    first_name: str | None = None
+    action: str
+    detail: str = ""
+
+
+@app.post("/api/log-activity")
+def log_activity_endpoint(payload: LogActivityIn):
+    db.log_activity(
+        payload.telegram_id,
+        payload.username,
+        payload.first_name,
+        payload.action,
+        payload.detail,
+    )
+    return {"ok": True}
+
+
+# ==========================================================
+# ADMIN API
+# ==========================================================
 
 class AssignIn(BaseModel):
     request_id: int
@@ -162,6 +186,7 @@ class AssignIn(BaseModel):
 def admin_assign(payload: AssignIn):
     if len(payload.otp) != 6 or not payload.otp.isdigit():
         raise HTTPException(400, "OTP must be 6 digits")
+
     req = db.get_request(payload.request_id)
     db.set_assigned_otp(payload.request_id, payload.otp)
 
@@ -178,7 +203,7 @@ def admin_assign(payload: AssignIn):
 
 class DecisionIn(BaseModel):
     request_id: int
-    decision: str  # "correct" | "incorrect"
+    decision: str
 
 
 @app.post("/api/admin/decision")
@@ -206,7 +231,22 @@ def admin_pending():
     return {"requests": db.get_pending_requests()}
 
 
-# ---------- Telegram notifications ----------
+@app.get("/api/admin/users")
+def admin_users():
+    return {"users": db.get_all_users()}
+
+
+@app.get("/api/admin/user/{telegram_id}")
+def admin_user_detail(telegram_id: int):
+    return {
+        "summary": db.get_user_summary(telegram_id),
+        "activity": db.get_user_activity(telegram_id, limit=30),
+    }
+
+
+# ==========================================================
+# TELEGRAM NOTIFICATIONS
+# ==========================================================
 
 async def _send_telegram(chat_id: int, text: str, reply_markup: dict | None = None):
     if not BOT_TOKEN or not chat_id:
@@ -256,17 +296,3 @@ async def _notify_admin_otp_submitted(req_id: int, entered: str):
         ]
     }
     await _send_telegram(ADMIN_ID, text, kb)
-
-# ---------- Admin: user tracking ----------
-
-@app.get("/api/admin/users")
-def admin_users():
-    return {"users": db.get_all_users()}
-
-
-@app.get("/api/admin/user/{telegram_id}")
-def admin_user_detail(telegram_id: int):
-    return {
-        "summary": db.get_user_summary(telegram_id),
-        "activity": db.get_user_activity(telegram_id, limit=30),
-    }
