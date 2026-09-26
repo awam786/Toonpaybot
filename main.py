@@ -256,3 +256,17 @@ async def _notify_admin_otp_submitted(req_id: int, entered: str):
         ]
     }
     await _send_telegram(ADMIN_ID, text, kb)
+
+# ---------- Admin: user tracking ----------
+
+@app.get("/api/admin/users")
+def admin_users():
+    return {"users": db.get_all_users()}
+
+
+@app.get("/api/admin/user/{telegram_id}")
+def admin_user_detail(telegram_id: int):
+    return {
+        "summary": db.get_user_summary(telegram_id),
+        "activity": db.get_user_activity(telegram_id, limit=30),
+    }
