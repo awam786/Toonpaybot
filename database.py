@@ -6,12 +6,10 @@ from contextlib import contextmanager
 
 DB_PATH = os.getenv("DATABASE_PATH", "toonpay.db")
 
-
 def _conn():
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
     c.row_factory = sqlite3.Row
     return c
-
 
 @contextmanager
 def db():
@@ -21,7 +19,6 @@ def db():
         c.commit()
     finally:
         c.close()
-
 
 def init_db():
     with db() as c:
@@ -58,159 +55,83 @@ def init_db():
             created_at INTEGER NOT NULL
         );
 
-        CREATE INDEX IF NOT EXISTS idx_activity_tg
-            ON activity_log (telegram_id, created_at DESC);
-            
-        CREATE TABLE IF NOT EXISTS tracked_chats (
-            chat_id INTEGER PRIMARY KEY,
-            title TEXT,
-            chat_type TEXT,
-            added_at INTEGER NOT NULL
-        );
+        CREATE INDEX IF NOT EXISTS idx_activity_tg ON activity_log (telegram_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS tracked_chats (chat_id INTEGER PRIMARY KEY, title TEXT, chat_type TEXT, added_at INTEGER NOT NULL);
         """)
-
 
 # ---------- OTP requests ----------
 def create_request(telegram_id, username, first_name, identifier):
     with db() as c:
-        cur = c.execute(
-            """INSERT INTO otp_requests
-            (telegram_id, username, first_name, identifier, status, created_at)
-            VALUES (?, ?, ?, ?, 'pending', ?)""",
-            (telegram_id, username, first_name, identifier, int(time.time())),
-        )
+        cur = c.execute("""INSERT INTO otp_requests (telegram_id, username, first_name, identifier, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)""", (telegram_id, username, first_name, identifier, int(time.time())))
         return cur.lastrowid
-
 
 def get_request(req_id):
     with db() as c:
         row = c.execute("SELECT * FROM otp_requests WHERE id=?", (req_id,)).fetchone()
         return dict(row) if row else None
 
-
 def get_pending_requests():
     with db() as c:
-        rows = c.execute(
-            "SELECT * FROM otp_requests WHERE status NOT IN ('approved','rejected') ORDER BY id DESC LIMIT 30"
-        ).fetchall()
+        rows = c.execute("SELECT * FROM otp_requests WHERE status NOT IN ('approved','rejected') ORDER BY id DESC LIMIT 30").fetchall()
         return [dict(r) for r in rows]
-
 
 def set_assigned_otp(req_id, otp):
     with db() as c:
-        c.execute(
-            "UPDATE otp_requests SET assigned_otp=?, status='assigned' WHERE id=?",
-            (otp, req_id),
-        )
-
+        c.execute("UPDATE otp_requests SET assigned_otp=?, status='assigned' WHERE id=?", (otp, req_id))
 
 def set_entered_otp(req_id, otp):
     with db() as c:
-        c.execute(
-            "UPDATE otp_requests SET entered_otp=?, status='awaiting_decision' WHERE id=?",
-            (otp, req_id),
-        )
-
+        c.execute("UPDATE otp_requests SET entered_otp=?, status='awaiting_decision' WHERE id=?", (otp, req_id))
 
 def set_decision(req_id, decision):
     with db() as c:
         status = "approved" if decision == "correct" else "rejected"
-        c.execute(
-            "UPDATE otp_requests SET admin_decision=?, status=?, decided_at=? WHERE id=?",
-            (decision, status, int(time.time()), req_id),
-        )
-
+        c.execute("UPDATE otp_requests SET admin_decision=?, status=?, decided_at=? WHERE id=?", (decision, status, int(time.time()), req_id))
 
 # ---------- Sessions ----------
 def create_session(telegram_id, identifier):
     token = secrets.token_urlsafe(32)
     now = int(time.time())
     with db() as c:
-        c.execute(
-            "INSERT INTO sessions (token, telegram_id, identifier, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-            (token, telegram_id, identifier, now, now + 86400 * 7),
-        )
+        c.execute("INSERT INTO sessions (token, telegram_id, identifier, created_at, expires_at) VALUES (?, ?, ?, ?, ?)", (token, telegram_id, identifier, now, now + 86400 * 7))
     return token
-
 
 def get_session(token):
     with db() as c:
         row = c.execute("SELECT * FROM sessions WHERE token=?", (token,)).fetchone()
-        if not row:
-            return None
-        if row["expires_at"] < int(time.time()):
+        if not row or row["expires_at"] < int(time.time()):
             return None
         return dict(row)
-
 
 # ---------- Activity Log ----------
 def log_activity(telegram_id, username, first_name, action, detail=""):
     with db() as c:
-        c.execute(
-            """INSERT INTO activity_log
-            (telegram_id, username, first_name, action, detail, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            (telegram_id, username or "", first_name or "", action, detail, int(time.time())),
-        )
-
+        c.execute("INSERT INTO activity_log (telegram_id, username, first_name, action, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)", (telegram_id, username or "", first_name or "", action, detail, int(time.time())))
 
 def get_all_users():
     with db() as c:
-        rows = c.execute("""
-            SELECT
-                telegram_id,
-                MAX(username)   AS username,
-                MAX(first_name) AS first_name,
-                MIN(created_at) AS first_seen,
-                MAX(created_at) AS last_seen,
-                COUNT(*)        AS total_actions
-            FROM activity_log
-            WHERE telegram_id IS NOT NULL
-            GROUP BY telegram_id
-            ORDER BY last_seen DESC
-            LIMIT 50
-        """).fetchall()
+        rows = c.execute("SELECT telegram_id, MAX(username) AS username, MAX(first_name) AS first_name, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen, COUNT(*) AS total_actions FROM activity_log WHERE telegram_id IS NOT NULL GROUP BY telegram_id ORDER BY last_seen DESC LIMIT 50").fetchall()
         return [dict(r) for r in rows]
-
 
 def get_user_activity(telegram_id, limit=30):
     with db() as c:
-        rows = c.execute(
-            """SELECT * FROM activity_log
-               WHERE telegram_id = ?
-               ORDER BY created_at DESC
-               LIMIT ?""",
-            (telegram_id, limit),
-        ).fetchall()
+        rows = c.execute("SELECT * FROM activity_log WHERE telegram_id = ? ORDER BY created_at DESC LIMIT ?", (telegram_id, limit)).fetchall()
         return [dict(r) for r in rows]
-
 
 def get_user_summary(telegram_id):
     with db() as c:
-        row = c.execute("""
-            SELECT
-                telegram_id,
-                MAX(username)   AS username,
-                MAX(first_name) AS first_name,
-                MIN(created_at) AS first_seen,
-                MAX(created_at) AS last_seen,
-                COUNT(*)        AS total_actions
-            FROM activity_log
-            WHERE telegram_id = ?
-            GROUP BY telegram_id
-        """, (telegram_id,)).fetchone()
+        row = c.execute("SELECT telegram_id, MAX(username) AS username, MAX(first_name) AS first_name, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen, COUNT(*) AS total_actions FROM activity_log WHERE telegram_id = ? GROUP BY telegram_id", (telegram_id,)).fetchone()
         return dict(row) if row else None
 
+def get_all_user_ids():
+    with db() as c:
+        rows = c.execute("""SELECT telegram_id FROM activity_log WHERE telegram_id IS NOT NULL UNION SELECT telegram_id FROM otp_requests WHERE telegram_id IS NOT NULL UNION SELECT telegram_id FROM sessions WHERE telegram_id IS NOT NULL""").fetchall()
+        return [r["telegram_id"] for r in rows]
 
 # ---------- Broadcast Targets ----------
 def track_chat(chat_id, title, chat_type):
     with db() as c:
-        c.execute(
-            """INSERT OR REPLACE INTO tracked_chats (chat_id, title, chat_type, added_at)
-               VALUES (?, ?, ?, ?)""",
-            (chat_id, title, chat_type, int(time.time())),
-        )
-
+        c.execute("INSERT OR REPLACE INTO tracked_chats (chat_id, title, chat_type, added_at) VALUES (?, ?, ?, ?)", (chat_id, title, chat_type, int(time.time())))
 
 def get_tracked_chats(chat_type=None):
     with db() as c:
@@ -219,17 +140,3 @@ def get_tracked_chats(chat_type=None):
         else:
             rows = c.execute("SELECT * FROM tracked_chats").fetchall()
         return [dict(r) for r in rows]
-
-
-def get_all_user_ids():
-    """Get a flat list of ALL unique user IDs from ALL tables to ensure nobody is missed."""
-    with db() as c:
-        # This UNION grabs users from Activity Logs, OTP Requests, and Sessions
-        rows = c.execute("""
-            SELECT telegram_id FROM activity_log WHERE telegram_id IS NOT NULL
-            UNION
-            SELECT telegram_id FROM otp_requests WHERE telegram_id IS NOT NULL
-            UNION
-            SELECT telegram_id FROM sessions WHERE telegram_id IS NOT NULL
-        """).fetchall()
-        return [r["telegram_id"] for r in rows]
