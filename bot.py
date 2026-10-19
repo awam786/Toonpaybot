@@ -21,12 +21,10 @@ BACKEND_URL = os.getenv("BACKEND_URL", "").rstrip("/")
 AWAITING_OTP_FOR: dict[int, int] = {}
 BROADCAST_STATE = {}
 
-# Initialize DB just in case the Bot starts before the Web server (to avoid tracking errors)
 db.init_db()
 
 def is_admin(update: Update) -> bool:
     return update.effective_user and update.effective_user.id == ADMIN_ID
-
 
 def _user_meta(update: Update):
     u = update.effective_user
@@ -34,19 +32,12 @@ def _user_meta(update: Update):
         return None, "", ""
     return u.id, u.username or "", u.first_name or ""
 
-
 async def _log(tg_id, username, first_name, action, detail=""):
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             await client.post(
                 f"{BACKEND_URL}/api/log-activity",
-                json={
-                    "telegram_id": tg_id,
-                    "username": username,
-                    "first_name": first_name,
-                    "action": action,
-                    "detail": detail,
-                },
+                json={"telegram_id": tg_id, "username": username, "first_name": first_name, "action": action, "detail": detail},
             )
     except Exception as e:
         print("log failed:", e)
@@ -59,7 +50,6 @@ async def _log(tg_id, username, first_name, action, detail=""):
 async def track_chats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP, ChatType.CHANNEL]:
-        # Using local DB just for tracking group IDs safely
         db.track_chat(chat.id, chat.title or "Unknown", chat.type)
         print(f"Tracked {chat.type}: {chat.title}")
 
@@ -124,12 +114,39 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-
 async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return
     BROADCAST_STATE.pop(update.effective_user.id, None)
     await update.message.reply_text("❌ Broadcast cancelled.")
+
+async def skip_button_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin chooses NOT to add a button."""
+    if not is_admin(update):
+        return
+    admin_id = update.effective_user.id
+    state = BROADCAST_STATE.get(admin_id)
+    
+    if state and state["step"] == "waiting_for_button":
+        state["step"] = "waiting_for_target"
+        state["reply_markup"] = None
+        await show_target_menu(update.message)
+    else:
+        await update.message.reply_text("No active broadcast to skip button for.")
+
+
+async def show_target_menu(message):
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("👥 All Users", callback_data="bcast:users")],
+        [InlineKeyboardButton("🎯 Specific Users", callback_data="bcast:specific")],
+        [InlineKeyboardButton("👥 All Groups", callback_data="bcast:groups")],
+        [InlineKeyboardButton("📢 All Channels", callback_data="bcast:channels")],
+    ])
+    await message.reply_text(
+        "✅ Setup complete.\n\n<b>Where do you want to send this?</b>",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
 
 
 # ==========================================================
@@ -153,30 +170,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         target = data.split(":")[1]
+        reply_markup = state.get("reply_markup") # Get the custom button!
         
         if target == "users":
-            # Fetch users from the Web API, NOT the local DB!
             async with httpx.AsyncClient(timeout=10) as client:
                 r = await client.get(f"{BACKEND_URL}/api/admin/all-users")
                 user_ids = r.json().get("users", [])
             
             await query.message.edit_text(f"🚀 Starting broadcast to <b>{len(user_ids)}</b> users...", parse_mode="HTML")
-            await execute_broadcast(query.message, state["msg"], user_ids, "users", context)
+            await execute_broadcast(query.message, state["msg"], user_ids, "users", context, reply_markup)
             BROADCAST_STATE.pop(admin_id, None)
 
         elif target == "groups":
-            chats = db.get_tracked_chats(ChatType.GROUP)
-            chats += db.get_tracked_chats(ChatType.SUPERGROUP)
+            chats = db.get_tracked_chats(ChatType.GROUP) + db.get_tracked_chats(ChatType.SUPERGROUP)
             chat_ids = [c["chat_id"] for c in chats]
             await query.message.edit_text(f"🚀 Starting broadcast to <b>{len(chat_ids)}</b> groups...", parse_mode="HTML")
-            await execute_broadcast(query.message, state["msg"], chat_ids, "groups", context)
+            await execute_broadcast(query.message, state["msg"], chat_ids, "groups", context, reply_markup)
             BROADCAST_STATE.pop(admin_id, None)
 
         elif target == "channels":
             chats = db.get_tracked_chats(ChatType.CHANNEL)
             chat_ids = [c["chat_id"] for c in chats]
             await query.message.edit_text(f"🚀 Starting broadcast to <b>{len(chat_ids)}</b> channels...", parse_mode="HTML")
-            await execute_broadcast(query.message, state["msg"], chat_ids, "channels", context)
+            await execute_broadcast(query.message, state["msg"], chat_ids, "channels", context, reply_markup)
             BROADCAST_STATE.pop(admin_id, None)
 
         elif target == "specific":
@@ -234,23 +250,44 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     state = BROADCAST_STATE.get(admin_id)
     if state:
+        # Step 1: They sent the message
         if state["step"] == "waiting_for_message":
             state["msg"] = update.message
-            state["step"] = "waiting_for_target"
+            state["step"] = "waiting_for_button"
             
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("👥 All Users", callback_data="bcast:users")],
-                [InlineKeyboardButton("🎯 Specific Users", callback_data="bcast:specific")],
-                [InlineKeyboardButton("👥 All Groups", callback_data="bcast:groups")],
-                [InlineKeyboardButton("📢 All Channels", callback_data="bcast:channels")],
-            ])
             await update.message.reply_text(
-                "✅ Message received.\n\n<b>Where do you want to send this?</b>",
-                reply_markup=kb,
+                "✅ Message received.\n\n"
+                "Do you want to add an inline button?\n"
+                "Send in this format: <code>Button Text | https://yourlink.com</code>\n\n"
+                "<i>(For the WebApp, paste your Railway URL. To open the bot, use https://t.me/YourBotUsername)</i>\n\n"
+                "Or send /skip to continue without a button.",
                 parse_mode="HTML"
             )
             return
 
+        # Step 2: They are sending the button
+        if state["step"] == "waiting_for_button":
+            text = update.message.text or ""
+            if "|" not in text:
+                await update.message.reply_text(
+                    "❌ Invalid format. Send <code>Button Text | https://yourlink.com</code> or /skip.",
+                    parse_mode="HTML"
+                )
+                return
+            
+            btn_text, url = [x.strip() for x in text.split("|", 1)]
+            
+            # If URL matches APP_URL, make it a WebApp button! Otherwise, standard URL button.
+            if url == APP_URL:
+                state["reply_markup"] = InlineKeyboardMarkup([[InlineKeyboardButton(btn_text, web_app=WebAppInfo(url=url))]])
+            else:
+                state["reply_markup"] = InlineKeyboardMarkup([[InlineKeyboardButton(btn_text, url=url)]])
+                
+            state["step"] = "waiting_for_target"
+            await show_target_menu(update.message)
+            return
+
+        # Step 3: They are sending specific IDs
         if state["step"] == "waiting_for_ids":
             text = update.message.text.replace(" ", "")
             try:
@@ -262,10 +299,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             await update.message.reply_text(f"🚀 Starting broadcast to <b>{len(ids)}</b> specific users...", parse_mode="HTML")
-            await execute_broadcast(update.message, state["msg"], ids, "users", context)
+            await execute_broadcast(update.message, state["msg"], ids, "users", context, state.get("reply_markup"))
             BROADCAST_STATE.pop(admin_id, None)
             return
 
+    # --- OTP ASSIGN FLOW ---
     req_id = AWAITING_OTP_FOR.get(chat_id)
     if req_id:
         text = (update.message.text or "").strip()
@@ -291,26 +329,24 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==========================================================
-# BROADCAST EXECUTION ENGINE (Fixed Signature)
+# BROADCAST EXECUTION ENGINE
 # ==========================================================
 
-async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, context):
+async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, context, reply_markup=None):
     success = 0
     failed = 0
     
-    # Send initial status
     status_msg = await progress_msg.reply_text(f"⏳ Progress: 0/{len(chat_ids)}")
 
     for index, chat_id in enumerate(chat_ids, 1):
         try:
-            # Copy the message the admin sent
-            await broadcast_msg.copy(chat_id=chat_id)
+            # Copy the message and attach the inline button if it exists
+            await broadcast_msg.copy(chat_id=chat_id, reply_markup=reply_markup)
             success += 1
         except Exception as e:
             print(f"Failed to send to {chat_id}: {e}")
             failed += 1
         
-        # Update progress every 10 sends to avoid Telegram edit limits
         if index % 10 == 0 or index == len(chat_ids):
             try:
                 await status_msg.edit_text(
@@ -319,7 +355,6 @@ async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, 
             except:
                 pass
         
-        # Anti-spam delay (crucial)
         await asyncio.sleep(0.05)
 
     await status_msg.edit_text(
@@ -414,6 +449,7 @@ def main():
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("broadcast", broadcast_cmd))
     app.add_handler(CommandHandler("cancel", cancel_broadcast))
+    app.add_handler(CommandHandler("skip", skip_button_cmd)) # New command to skip button
     
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, track_chats))
     app.add_handler(CallbackQueryHandler(button_handler))
