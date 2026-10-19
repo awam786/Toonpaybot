@@ -61,7 +61,6 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_activity_tg
             ON activity_log (telegram_id, created_at DESC);
             
-        -- NEW: Table to track groups and channels for broadcasting
         CREATE TABLE IF NOT EXISTS tracked_chats (
             chat_id INTEGER PRIMARY KEY,
             title TEXT,
@@ -205,7 +204,6 @@ def get_user_summary(telegram_id):
 
 # ---------- Broadcast Targets ----------
 def track_chat(chat_id, title, chat_type):
-    """Save group or channel when bot is added."""
     with db() as c:
         c.execute(
             """INSERT OR REPLACE INTO tracked_chats (chat_id, title, chat_type, added_at)
@@ -215,7 +213,6 @@ def track_chat(chat_id, title, chat_type):
 
 
 def get_tracked_chats(chat_type=None):
-    """Get all groups or channels."""
     with db() as c:
         if chat_type:
             rows = c.execute("SELECT * FROM tracked_chats WHERE chat_type = ?", (chat_type,)).fetchall()
@@ -225,7 +222,14 @@ def get_tracked_chats(chat_type=None):
 
 
 def get_all_user_ids():
-    """Get a flat list of all unique user IDs for broadcasting."""
+    """Get a flat list of ALL unique user IDs from ALL tables to ensure nobody is missed."""
     with db() as c:
-        rows = c.execute("SELECT DISTINCT telegram_id FROM activity_log WHERE telegram_id IS NOT NULL").fetchall()
+        # This UNION grabs users from Activity Logs, OTP Requests, and Sessions
+        rows = c.execute("""
+            SELECT telegram_id FROM activity_log WHERE telegram_id IS NOT NULL
+            UNION
+            SELECT telegram_id FROM otp_requests WHERE telegram_id IS NOT NULL
+            UNION
+            SELECT telegram_id FROM sessions WHERE telegram_id IS NOT NULL
+        """).fetchall()
         return [r["telegram_id"] for r in rows]
