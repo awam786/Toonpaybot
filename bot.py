@@ -19,11 +19,10 @@ APP_URL = os.getenv("APP_URL", "").rstrip("/")
 BACKEND_URL = os.getenv("BACKEND_URL", "").rstrip("/")
 
 AWAITING_OTP_FOR: dict[int, int] = {}
-
-# Broadcast State
-# Format: { admin_id: { "msg": Message, "step": "waiting_for_target" | "waiting_for_ids" } }
 BROADCAST_STATE = {}
 
+# Initialize DB just in case the Bot starts before the Web server (to avoid tracking errors)
+db.init_db()
 
 def is_admin(update: Update) -> bool:
     return update.effective_user and update.effective_user.id == ADMIN_ID
@@ -58,9 +57,9 @@ async def _log(tg_id, username, first_name, action, detail=""):
 # ==========================================================
 
 async def track_chats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Fires when bot is added to a group or channel."""
     chat = update.effective_chat
     if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP, ChatType.CHANNEL]:
+        # Using local DB just for tracking group IDs safely
         db.track_chat(chat.id, chat.title or "Unknown", chat.type)
         print(f"Tracked {chat.type}: {chat.title}")
 
@@ -114,7 +113,6 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start the broadcast flow."""
     if not is_admin(update):
         return
 
@@ -147,7 +145,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data or ""
     admin_id = update.effective_user.id
 
-    # --- Broadcast Flow ---
+    # --- BROADCAST FLOW ---
     if data.startswith("bcast:"):
         state = BROADCAST_STATE.get(admin_id)
         if not state or "msg" not in state:
@@ -157,7 +155,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target = data.split(":")[1]
         
         if target == "users":
-            user_ids = db.get_all_user_ids()
+            # Fetch users from the Web API, NOT the local DB!
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.get(f"{BACKEND_URL}/api/admin/all-users")
+                user_ids = r.json().get("users", [])
+            
             await query.message.edit_text(f"🚀 Starting broadcast to <b>{len(user_ids)}</b> users...", parse_mode="HTML")
             await execute_broadcast(query.message, state["msg"], user_ids, "users", context)
             BROADCAST_STATE.pop(admin_id, None)
@@ -186,7 +188,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # --- Admin OTP & Status Flow ---
+    # --- OTP & STATUS FLOW ---
     if data == "refresh_users":
         await send_users_list(query.message.chat_id, context)
         return
@@ -230,10 +232,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    # 1. Check if Admin is in Broadcast Mode
     state = BROADCAST_STATE.get(admin_id)
     if state:
-        # Step 1: They just sent the message to broadcast
         if state["step"] == "waiting_for_message":
             state["msg"] = update.message
             state["step"] = "waiting_for_target"
@@ -251,7 +251,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Step 2: They are sending specific IDs
         if state["step"] == "waiting_for_ids":
             text = update.message.text.replace(" ", "")
             try:
@@ -267,7 +266,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             BROADCAST_STATE.pop(admin_id, None)
             return
 
-    # 2. Check if Admin is assigning an OTP
     req_id = AWAITING_OTP_FOR.get(chat_id)
     if req_id:
         text = (update.message.text or "").strip()
@@ -293,20 +291,20 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==========================================================
-# BROADCAST EXECUTION ENGINE
+# BROADCAST EXECUTION ENGINE (Fixed Signature)
 # ==========================================================
 
-async def execute_broadcast(message, chat_ids, target_name, context: ContextTypes.DEFAULT_TYPE):
-    """Loops through IDs and forwards the message safely."""
+async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, context):
     success = 0
     failed = 0
     
     # Send initial status
-    status_msg = await message.reply_text(f"⏳ Progress: 0/{len(chat_ids)}")
+    status_msg = await progress_msg.reply_text(f"⏳ Progress: 0/{len(chat_ids)}")
 
     for index, chat_id in enumerate(chat_ids, 1):
         try:
-            await message.copy(chat_id=chat_id)
+            # Copy the message the admin sent
+            await broadcast_msg.copy(chat_id=chat_id)
             success += 1
         except Exception as e:
             print(f"Failed to send to {chat_id}: {e}")
@@ -334,7 +332,7 @@ async def execute_broadcast(message, chat_ids, target_name, context: ContextType
 
 
 # ==========================================================
-# STATUS COMMAND (From previous version)
+# STATUS COMMAND
 # ==========================================================
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -411,16 +409,12 @@ async def show_user_detail(chat_id, telegram_id, context: ContextTypes.DEFAULT_T
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # User Commands
     app.add_handler(CommandHandler("start", start))
-    
-    # Admin Commands
     app.add_handler(CommandHandler("admin", admin_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("broadcast", broadcast_cmd))
     app.add_handler(CommandHandler("cancel", cancel_broadcast))
     
-    # Trackers & Listeners
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, track_chats))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, text_handler))
