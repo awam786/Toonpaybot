@@ -101,30 +101,28 @@ async def skip_button_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No active broadcast to skip button for.")
 
 async def show_target_menu(message):
+    # UPDATED: Added Specific Groups button
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 All Users", callback_data="bcast:users")],
         [InlineKeyboardButton("🎯 Specific Users", callback_data="bcast:specific")],
         [InlineKeyboardButton("👥 All Groups", callback_data="bcast:groups")],
+        [InlineKeyboardButton("🎯 Specific Groups", callback_data="bcast:specific_groups")], # NEW
         [InlineKeyboardButton("📢 All Channels", callback_data="bcast:channels")],
     ])
     await message.reply_text("✅ Setup complete.\n\n<b>Where do you want to send this?</b>", reply_markup=kb, parse_mode="HTML")
 
-# --- NEW: Simple Delete Command ---
 async def delete_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
     
-    # Check if the admin is replying to a message
     if not update.message.reply_to_message:
         await update.message.reply_text("⚠️ Please reply to the message you want to delete with /delete")
         return
         
     try:
-        # Try to delete the message they replied to
         await context.bot.delete_message(
             chat_id=update.effective_chat.id,
             message_id=update.message.reply_to_message.message_id
         )
-        # Also delete the /delete command itself to keep the chat clean
         await update.message.delete()
     except Exception as e:
         await update.message.reply_text(f"❌ Failed to delete message.\n<i>Error: {e}</i>\n\n*(Note: The bot must be Admin with 'Delete Messages' permission, or the message is older than 48h).*", parse_mode="HTML")
@@ -162,6 +160,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await execute_broadcast(query.message, state["msg"], chat_ids, "groups", context, reply_markup)
             BROADCAST_STATE.pop(admin_id, None)
 
+        # NEW: Handle Specific Groups click
+        elif target == "specific_groups":
+            state["step"] = "waiting_for_group_ids"
+            await query.message.edit_text(
+                "🎯 <b>Specific Groups</b>\n\n"
+                "Send the Group IDs separated by commas (e.g., <code>-1001234567890, -1009876543210</code>).\n\n"
+                "<i>(Note: Group IDs always start with -100)</i>",
+                parse_mode="HTML"
+            )
+
         elif target == "channels":
             chats = db.get_tracked_chats(ChatType.CHANNEL)
             chat_ids = [c["chat_id"] for c in chats]
@@ -171,7 +179,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif target == "specific":
             state["step"] = "waiting_for_ids"
-            await query.message.edit_text("🎯 <b>Specific Users</b>\n\nSend the Telegram IDs separated by commas:", parse_mode="HTML")
+            await query.message.edit_text("🎯 <b>Specific Users</b>\n\nSend the Telegram IDs separated by commas (e.g., <code>123456789, 987654321</code>):", parse_mode="HTML")
         return
 
     if data == "refresh_users":
@@ -240,16 +248,32 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_target_menu(update.message)
             return
 
+        # --- Specific USERS input ---
         if state["step"] == "waiting_for_ids":
             text = update.message.text.replace(" ", "")
             try:
                 ids = [int(i.strip()) for i in text.split(",") if i.strip()]
                 if not ids: raise ValueError
             except ValueError:
-                await update.message.reply_text("❌ Invalid format. Send IDs separated by commas.")
+                await update.message.reply_text("❌ Invalid format. Send User IDs separated by commas.")
                 return
             await update.message.reply_text(f"🚀 Starting broadcast to <b>{len(ids)}</b> specific users...", parse_mode="HTML")
-            await execute_broadcast(update.message, state["msg"], ids, "users", context, state.get("reply_markup"))
+            await execute_broadcast(update.message, state["msg"], ids, "specific users", context, state.get("reply_markup"))
+            BROADCAST_STATE.pop(admin_id, None)
+            return
+
+        # --- Specific GROUPS input (NEW) ---
+        if state["step"] == "waiting_for_group_ids":
+            text = update.message.text.replace(" ", "")
+            try:
+                # Group IDs are negative numbers (e.g. -100123456)
+                ids = [int(i.strip()) for i in text.split(",") if i.strip()]
+                if not ids: raise ValueError
+            except ValueError:
+                await update.message.reply_text("❌ Invalid format. Send Group IDs separated by commas.")
+                return
+            await update.message.reply_text(f"🚀 Starting broadcast to <b>{len(ids)}</b> specific groups...", parse_mode="HTML")
+            await execute_broadcast(update.message, state["msg"], ids, "specific groups", context, state.get("reply_markup"))
             BROADCAST_STATE.pop(admin_id, None)
             return
 
@@ -366,7 +390,7 @@ def main():
     app.add_handler(CommandHandler("broadcast", broadcast_cmd))
     app.add_handler(CommandHandler("cancel", cancel_broadcast))
     app.add_handler(CommandHandler("skip", skip_button_cmd))
-    app.add_handler(CommandHandler("delete", delete_cmd)) # NEW SIMPLE DELETE
+    app.add_handler(CommandHandler("delete", delete_cmd))
     
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, track_chats))
     app.add_handler(CallbackQueryHandler(button_handler))
