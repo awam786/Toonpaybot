@@ -42,17 +42,14 @@ def _fmt_ts(ts):
 # GLOBAL ERROR HANDLER
 # ==========================================================
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Logs errors and notifies the admin via DM."""
     tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
     tb_string = "".join(tb_list)
     print(f"Exception while handling an update:\n{tb_string}")
-    
     try:
         if ADMIN_ID:
-            error_msg = f"⚠️ **Bot Error**\n\n`{str(context.error)[:1000]}`"
-            await context.bot.send_message(chat_id=ADMIN_ID, text=error_msg, parse_mode="Markdown")
-    except:
-        pass
+            error_msg = f"⚠️ <b>Bot Error</b>\n\n<code>{str(context.error)[:1000]}</code>"
+            await context.bot.send_message(chat_id=ADMIN_ID, text=error_msg, parse_mode="HTML")
+    except: pass
 
 # ==========================================================
 # TRACK CHATS
@@ -85,17 +82,28 @@ async def clone_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid token format.")
         return
 
-    msg = await update.message.reply_text("⏳ Validating new clone token...")
+    msg = await update.message.reply_text("⏳ Validating new clone token (this may take up to 30s)...")
+    
+    # Use httpx directly with 30s timeout to avoid PTB default timeouts
     try:
-        test_bot = Bot(token=new_token)
-        bot_info = await test_bot.get_me()
-        await test_bot.close()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(f"https://api.telegram.org/bot{new_token}/getMe")
+            data = r.json()
+            
+            if not data.get("ok"):
+                error_msg = data.get("description", "Unknown error")
+                await msg.edit_text(f"❌ Invalid token!\nTelegram said: <code>{error_msg}</code>", parse_mode="HTML")
+                return
+                
+            bot_info = data["result"]
+            bot_username = bot_info["username"]
+            bot_id = bot_info["id"]
     except Exception as e:
-        await msg.edit_text(f"❌ Invalid token!\nError: {e}")
+        await msg.edit_text(f"❌ Connection Error: <code>{e}</code>", parse_mode="HTML")
         return
 
-    db.add_clone(bot_info.id, bot_info.username, new_token)
-    await msg.edit_text(f"✅ Clone @{bot_info.username} added successfully!\n\n🔄 Restarting system to launch new clone...", parse_mode="HTML")
+    db.add_clone(bot_id, bot_username, new_token)
+    await msg.edit_text(f"✅ Clone @{bot_username} added successfully!\n\n🔄 Restarting system to launch new clone...", parse_mode="HTML")
     await asyncio.sleep(2)
     os.execv(sys.executable, ['python'] + sys.argv)
 
@@ -106,17 +114,26 @@ async def migrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Usage: `/migrate <new_bot_token>`")
         return
 
-    msg = await update.message.reply_text("⏳ Validating new main token...")
+    msg = await update.message.reply_text("⏳ Validating new main token (this may take up to 30s)...")
+    
     try:
-        test_bot = Bot(token=new_token)
-        bot_info = await test_bot.get_me()
-        await test_bot.close()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(f"https://api.telegram.org/bot{new_token}/getMe")
+            data = r.json()
+            
+            if not data.get("ok"):
+                error_msg = data.get("description", "Unknown error")
+                await msg.edit_text(f"❌ Invalid token!\nTelegram said: <code>{error_msg}</code>", parse_mode="HTML")
+                return
+                
+            bot_info = data["result"]
+            bot_username = bot_info["username"]
     except Exception as e:
-        await msg.edit_text(f"❌ Invalid token!\nError: {e}")
+        await msg.edit_text(f"❌ Connection Error: <code>{e}</code>", parse_mode="HTML")
         return
 
     db.set_setting("BOT_TOKEN", new_token)
-    await msg.edit_text(f"✅ Token validated for @{bot_info.username}.\n\n🔄 Restarting bot...")
+    await msg.edit_text(f"✅ Token validated for @{bot_username}.\n\n🔄 Restarting bot...")
     await asyncio.sleep(2)
     os.execv(sys.executable, ['python'] + sys.argv)
 
@@ -222,11 +239,11 @@ async def send_users_list(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{BACKEND_URL}/api/admin/users")
             if r.status_code != 200:
-                await context.bot.send_message(chat_id=chat_id, text=f"❌ Backend Error: {r.status_code}\n\n`{r.text[:200]}`", parse_mode="Markdown")
+                await context.bot.send_message(chat_id=chat_id, text=f"❌ Backend Error: {r.status_code}\n\n<code>{r.text[:200]}</code>", parse_mode="HTML")
                 return
             users = r.json().get("users", [])
     except Exception as e:
-        await context.bot.send_message(chat_id=chat_id, text=f"❌ Failed to parse backend response:\n`{e}`", parse_mode="Markdown")
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Failed to parse backend response:\n<code>{e}</code>", parse_mode="HTML")
         return
 
     if not users:
@@ -545,8 +562,6 @@ def register_handlers(app):
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, track_chats))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, text_handler))
-    
-    # Register the global error handler
     app.add_error_handler(error_handler)
 
 async def run_bots():
