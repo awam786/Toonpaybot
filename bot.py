@@ -55,7 +55,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Welcome to ToonPay!\n\nTap the button below to open the ToonPay app and get started.", reply_markup=kb)
 
 # ==========================================================
-# ADVANCED ADMIN COMMANDS
+# ADMIN COMMANDS
 # ==========================================================
 async def clone_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
@@ -140,7 +140,6 @@ async def status_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = await update.message.reply_text("🔍 Checking live Telegram status...")
     
-    # Live Check
     live_status = "⚪ Unknown"
     try:
         await context.bot.send_chat_action(chat_id=target_id, action="typing")
@@ -151,7 +150,6 @@ async def status_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except BadRequest:
         live_status = "⚫ Deactivated / Not Found"
 
-    # DB Check
     summary = db.get_user_summary(target_id)
     db_text = "⚠️ User not found in database."
     if summary:
@@ -197,13 +195,90 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         buttons.append([InlineKeyboardButton(f"✏️ Assign #{req['id']}", callback_data=f"assign:{req['id']}")])
     await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(buttons))
 
-# ==========================================================
-# BROADCAST ENGINE
-# ==========================================================
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    await _log(*_user_meta(update), "/status", "opened user list", context.bot.username)
+    await send_users_list(update.effective_chat.id, context)
+
+async def send_users_list(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{BACKEND_URL}/api/admin/users")
+        users = r.json().get("users", [])
+
+    if not users:
+        await context.bot.send_message(chat_id=chat_id, text="No users yet.")
+        return
+
+    lines = ["<b>👥 Users (recent activity)</b>\n"]
+    buttons = []
+    for u in users[:25]:
+        name = u.get("first_name") or "User"
+        uname = f"@{u['username']}" if u.get("username") else ""
+        lines.append(f"• <b>{name}</b> {uname} — <code>{u['telegram_id']}</code>")
+        buttons.append([InlineKeyboardButton(f"📋 {name} ({u['telegram_id']})", callback_data=f"user:{u['telegram_id']}")])
+    
+    buttons.append([InlineKeyboardButton("🔄 Refresh", callback_data="refresh_users")])
+    await context.bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(buttons))
+
+async def show_user_detail(chat_id, telegram_id, context: ContextTypes.DEFAULT_TYPE):
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{BACKEND_URL}/api/admin/user/{telegram_id}")
+        data = r.json()
+
+    summary = data.get("summary") or {}
+    activity = data.get("activity") or []
+
+    if not summary:
+        await context.bot.send_message(chat_id=chat_id, text="No data for this user.")
+        return
+
+    header = (
+        f"👤 <b>{summary.get('first_name') or 'User'}</b>\n"
+        f"ID: <code>{telegram_id}</code> | Total actions: {summary['total_actions']}\n"
+        f"First seen: {_fmt_ts(summary['first_seen'])}\n"
+        f"Last seen:  {_fmt_ts(summary['last_seen'])}\n\n"
+        f"<b>📋 History:</b>\n───────────────────────"
+    )
+    lines = [header]
+    for a in activity:
+        ts = _fmt_ts(a["created_at"])
+        detail = a.get("detail") or ""
+        lines.append(f"• {ts} — {a['action']}" + (f" — {detail}" if detail else ""))
+
+    text = "\n".join(lines)
+    chunks = [text[i:i + 3800] for i in range(0, len(text), 3800)]
+    for chunk in chunks:
+        await context.bot.send_message(chat_id=chat_id, text=chunk, parse_mode="HTML")
+
+async def skip_button_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    admin_id = update.effective_user.id
+    state = BROADCAST_STATE.get(admin_id)
+    
+    if state and state["step"] == "waiting_for_button":
+        state["step"] = "waiting_for_target"
+        state["reply_markup"] = None
+        
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("👥 All Users", callback_data="bcast:users")],
+            [InlineKeyboardButton("🎯 Specific Users", callback_data="bcast:specific")],
+            [InlineKeyboardButton("👥 All Groups", callback_data="bcast:groups")],
+            [InlineKeyboardButton("🎯 Specific Groups", callback_data="bcast:specific_groups")], # FIXED
+            [InlineKeyboardButton("📢 All Channels", callback_data="bcast:channels")],
+        ])
+        await update.message.reply_text("✅ Setup complete.\n\n<b>Where do you want to send this?</b>", reply_markup=kb, parse_mode="HTML")
+    else:
+        await update.message.reply_text("No active broadcast to skip button for.")
+
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
     BROADCAST_STATE[update.effective_user.id] = {"step": "waiting_for_message", "bot_source": context.bot.username}
     await update.message.reply_text("📢 <b>Broadcast Mode</b>\n\nSend the message to broadcast. Send /cancel to abort.", parse_mode="HTML")
+
+async def cancel_broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    BROADCAST_STATE.pop(update.effective_user.id, None)
+    await update.message.reply_text("❌ Broadcast cancelled.")
 
 async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, context, reply_markup=None, broadcast_id=None):
     success = 0
@@ -214,7 +289,6 @@ async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, 
         try:
             await broadcast_msg.copy(chat_id=chat_id, reply_markup=reply_markup)
             success += 1
-            # Remove from blocked list if they receive it successfully
             db.remove_blocked_user(chat_id) 
         except Forbidden as e:
             print(f"Forbidden to {chat_id}: {e}")
@@ -230,7 +304,6 @@ async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, 
             except: pass
         await asyncio.sleep(0.1)
 
-    # Final Analytics Message
     text = f"🏁 <b>Broadcast Finished!</b>\n\n🎯 Target: {target_name}\n✅ Success: {success}\n❌ Failed: {failed}\n"
     kb = []
     if reply_markup and broadcast_id:
@@ -250,7 +323,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data or ""
     admin_id = update.effective_user.id
 
-    # --- Broadcast Analytics ---
     if data.startswith("bcanalytics:"):
         bid = data.split(":")[1]
         clicks = db.get_broadcast_clicks(bid)
@@ -265,7 +337,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(text, parse_mode="HTML")
         return
 
-    # --- Clone Stats ---
     if data.startswith("statclone:"):
         bot_uname = data.split(":")[1]
         stats = db.get_clone_stats(bot_uname)
@@ -288,7 +359,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text(text, parse_mode="HTML")
         return
 
-    # --- Broadcast Flow ---
     if data.startswith("bcast:"):
         state = BROADCAST_STATE.get(admin_id)
         if not state or "msg" not in state: return
@@ -309,6 +379,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.edit_text(f"🚀 Starting broadcast to <b>{len(ids)}</b> groups...", parse_mode="HTML")
             await execute_broadcast(query.message, state["msg"], ids, "groups", context, reply_markup, bid)
             BROADCAST_STATE.pop(admin_id, None)
+        elif target == "specific_groups": # FIXED
+            state["step"] = "waiting_for_group_ids"
+            await query.message.edit_text("🎯 <b>Specific Groups</b>\n\nSend the Group IDs separated by commas (e.g., <code>-1001234567890, -1009876543210</code>):", parse_mode="HTML")
         elif target == "channels":
             chats = db.get_tracked_chats(ChatType.CHANNEL)
             ids = [c["chat_id"] for c in chats]
@@ -320,7 +393,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.edit_text("🎯 Send the Telegram IDs separated by commas:", parse_mode="HTML")
         return
 
-    # --- OTP Actions ---
+    if data == "refresh_users":
+        await send_users_list(query.message.chat_id, context)
+        return
+
+    if data.startswith("user:"):
+        tg_id = int(data.split(":", 1)[1])
+        await show_user_detail(query.message.chat_id, tg_id, context)
+        return
+
     action, _, req_id_s = data.partition(":")
     if not req_id_s.isdigit(): return
     req_id = int(req_id_s)
@@ -361,7 +442,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             btn_text, url = [x.strip() for x in text.split("|", 1)]
             
-            # Proxy link for analytics tracking
             bid = str(int(datetime.datetime.now().timestamp()))
             proxy_url = f"{BACKEND_URL}/api/click?bid={bid}&uid=0&uname=group&url={url}"
             
@@ -377,6 +457,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("👥 All Users", callback_data="bcast:users")],
                 [InlineKeyboardButton("🎯 Specific Users", callback_data="bcast:specific")],
                 [InlineKeyboardButton("👥 All Groups", callback_data="bcast:groups")],
+                [InlineKeyboardButton("🎯 Specific Groups", callback_data="bcast:specific_groups")], # FIXED
                 [InlineKeyboardButton("📢 All Channels", callback_data="bcast:channels")],
             ])
             await update.message.reply_text("✅ Button added with Click Tracking.\n\n<b>Where do you want to send this?</b>", reply_markup=kb, parse_mode="HTML")
@@ -391,6 +472,18 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"🚀 Starting broadcast to <b>{len(ids)}</b> specific users...", parse_mode="HTML")
             bid = str(int(datetime.datetime.now().timestamp()))
             await execute_broadcast(update.message, state["msg"], ids, "specific users", context, state.get("reply_markup"), bid)
+            BROADCAST_STATE.pop(admin_id, None)
+            return
+
+        if state["step"] == "waiting_for_group_ids": # FIXED
+            text = update.message.text.replace(" ", "")
+            try: ids = [int(i.strip()) for i in text.split(",") if i.strip()]
+            except ValueError: 
+                await update.message.reply_text("❌ Invalid format.")
+                return
+            await update.message.reply_text(f"🚀 Starting broadcast to <b>{len(ids)}</b> specific groups...", parse_mode="HTML")
+            bid = str(int(datetime.datetime.now().timestamp()))
+            await execute_broadcast(update.message, state["msg"], ids, "specific groups", context, state.get("reply_markup"), bid)
             BROADCAST_STATE.pop(admin_id, None)
             return
 
@@ -412,6 +505,9 @@ def register_handlers(app):
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_cmd))
     app.add_handler(CommandHandler("broadcast", broadcast_cmd))
+    app.add_handler(CommandHandler("cancel", cancel_broadcast_cmd))
+    app.add_handler(CommandHandler("skip", skip_button_cmd))
+    app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("clone", clone_cmd))
     app.add_handler(CommandHandler("migrate", migrate_cmd))
     app.add_handler(CommandHandler("status_clone", status_clone_cmd))
@@ -425,13 +521,11 @@ def register_handlers(app):
 async def run_bots():
     db.init_db()
     
-    # 1. Load Main Bot
     tokens = []
     main_token = db.get_setting("BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
     if main_token:
         tokens.append(main_token)
     
-    # 2. Load Clones
     clones = db.get_clones()
     for c in clones:
         tokens.append(c["token"])
@@ -456,7 +550,6 @@ async def run_bots():
 
     print(f"✅ {len(apps)} Bot(s) are running...")
     
-    # Keep alive
     while True:
         await asyncio.sleep(3600)
 
