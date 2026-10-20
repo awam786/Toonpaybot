@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import httpx
@@ -14,6 +14,12 @@ BACKEND_URL = os.getenv("BACKEND_URL", "").rstrip("/")
 
 db.init_db()
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# Global Error Handler (Prevents HTML 500 pages, returns JSON instead)
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"API Error: {exc}")
+    return JSONResponse(status_code=500, content={"error": str(exc)})
 
 def _page(name):
     with open(os.path.join(STATIC_DIR, name), "r", encoding="utf-8") as f: return HTMLResponse(f.read())
@@ -35,7 +41,6 @@ def logo(): return FileResponse(os.path.join(STATIC_DIR, "logo.png"))
 # ==========================================================
 @app.get("/api/click")
 def track_click(bid: str, uid: int, uname: str, url: str):
-    """Logs the click and redirects the user to the actual URL."""
     db.log_broadcast_click(bid, uid, uname)
     return RedirectResponse(url=url)
 
