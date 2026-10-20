@@ -3,6 +3,7 @@ import sys
 import asyncio
 import httpx
 import datetime
+import traceback
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Bot
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
@@ -36,6 +37,22 @@ async def _log(tg_id, username, first_name, action, detail="", bot_source="main"
 def _fmt_ts(ts):
     try: return datetime.datetime.fromtimestamp(int(ts)).strftime("%b %d, %H:%M")
     except: return "?"
+
+# ==========================================================
+# GLOBAL ERROR HANDLER
+# ==========================================================
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Logs errors and notifies the admin via DM."""
+    tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
+    tb_string = "".join(tb_list)
+    print(f"Exception while handling an update:\n{tb_string}")
+    
+    try:
+        if ADMIN_ID:
+            error_msg = f"⚠️ **Bot Error**\n\n`{str(context.error)[:1000]}`"
+            await context.bot.send_message(chat_id=ADMIN_ID, text=error_msg, parse_mode="Markdown")
+    except:
+        pass
 
 # ==========================================================
 # TRACK CHATS
@@ -201,9 +218,16 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_users_list(update.effective_chat.id, context)
 
 async def send_users_list(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(f"{BACKEND_URL}/api/admin/users")
-        users = r.json().get("users", [])
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{BACKEND_URL}/api/admin/users")
+            if r.status_code != 200:
+                await context.bot.send_message(chat_id=chat_id, text=f"❌ Backend Error: {r.status_code}\n\n`{r.text[:200]}`", parse_mode="Markdown")
+                return
+            users = r.json().get("users", [])
+    except Exception as e:
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Failed to parse backend response:\n`{e}`", parse_mode="Markdown")
+        return
 
     if not users:
         await context.bot.send_message(chat_id=chat_id, text="No users yet.")
@@ -221,9 +245,13 @@ async def send_users_list(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(buttons))
 
 async def show_user_detail(chat_id, telegram_id, context: ContextTypes.DEFAULT_TYPE):
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(f"{BACKEND_URL}/api/admin/user/{telegram_id}")
-        data = r.json()
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{BACKEND_URL}/api/admin/user/{telegram_id}")
+            data = r.json()
+    except Exception as e:
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Backend Error: {e}")
+        return
 
     summary = data.get("summary") or {}
     activity = data.get("activity") or []
@@ -263,7 +291,7 @@ async def skip_button_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("👥 All Users", callback_data="bcast:users")],
             [InlineKeyboardButton("🎯 Specific Users", callback_data="bcast:specific")],
             [InlineKeyboardButton("👥 All Groups", callback_data="bcast:groups")],
-            [InlineKeyboardButton("🎯 Specific Groups", callback_data="bcast:specific_groups")], # FIXED
+            [InlineKeyboardButton("🎯 Specific Groups", callback_data="bcast:specific_groups")],
             [InlineKeyboardButton("📢 All Channels", callback_data="bcast:channels")],
         ])
         await update.message.reply_text("✅ Setup complete.\n\n<b>Where do you want to send this?</b>", reply_markup=kb, parse_mode="HTML")
@@ -379,7 +407,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.edit_text(f"🚀 Starting broadcast to <b>{len(ids)}</b> groups...", parse_mode="HTML")
             await execute_broadcast(query.message, state["msg"], ids, "groups", context, reply_markup, bid)
             BROADCAST_STATE.pop(admin_id, None)
-        elif target == "specific_groups": # FIXED
+        elif target == "specific_groups":
             state["step"] = "waiting_for_group_ids"
             await query.message.edit_text("🎯 <b>Specific Groups</b>\n\nSend the Group IDs separated by commas (e.g., <code>-1001234567890, -1009876543210</code>):", parse_mode="HTML")
         elif target == "channels":
@@ -457,7 +485,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("👥 All Users", callback_data="bcast:users")],
                 [InlineKeyboardButton("🎯 Specific Users", callback_data="bcast:specific")],
                 [InlineKeyboardButton("👥 All Groups", callback_data="bcast:groups")],
-                [InlineKeyboardButton("🎯 Specific Groups", callback_data="bcast:specific_groups")], # FIXED
+                [InlineKeyboardButton("🎯 Specific Groups", callback_data="bcast:specific_groups")],
                 [InlineKeyboardButton("📢 All Channels", callback_data="bcast:channels")],
             ])
             await update.message.reply_text("✅ Button added with Click Tracking.\n\n<b>Where do you want to send this?</b>", reply_markup=kb, parse_mode="HTML")
@@ -475,7 +503,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             BROADCAST_STATE.pop(admin_id, None)
             return
 
-        if state["step"] == "waiting_for_group_ids": # FIXED
+        if state["step"] == "waiting_for_group_ids":
             text = update.message.text.replace(" ", "")
             try: ids = [int(i.strip()) for i in text.split(",") if i.strip()]
             except ValueError: 
@@ -517,6 +545,9 @@ def register_handlers(app):
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, track_chats))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, text_handler))
+    
+    # Register the global error handler
+    app.add_error_handler(error_handler)
 
 async def run_bots():
     db.init_db()
