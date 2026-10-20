@@ -101,12 +101,11 @@ async def skip_button_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No active broadcast to skip button for.")
 
 async def show_target_menu(message):
-    # UPDATED: Added Specific Groups button
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 All Users", callback_data="bcast:users")],
         [InlineKeyboardButton("🎯 Specific Users", callback_data="bcast:specific")],
         [InlineKeyboardButton("👥 All Groups", callback_data="bcast:groups")],
-        [InlineKeyboardButton("🎯 Specific Groups", callback_data="bcast:specific_groups")], # NEW
+        [InlineKeyboardButton("🎯 Specific Groups", callback_data="bcast:specific_groups")],
         [InlineKeyboardButton("📢 All Channels", callback_data="bcast:channels")],
     ])
     await message.reply_text("✅ Setup complete.\n\n<b>Where do you want to send this?</b>", reply_markup=kb, parse_mode="HTML")
@@ -125,7 +124,7 @@ async def delete_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.delete()
     except Exception as e:
-        await update.message.reply_text(f"❌ Failed to delete message.\n<i>Error: {e}</i>\n\n*(Note: The bot must be Admin with 'Delete Messages' permission, or the message is older than 48h).*", parse_mode="HTML")
+        await update.message.reply_text(f"❌ Failed to delete message.\n<i>Error: {e}</i>", parse_mode="HTML")
 
 # ==========================================================
 # CALLBACKS (BUTTONS)
@@ -160,7 +159,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await execute_broadcast(query.message, state["msg"], chat_ids, "groups", context, reply_markup)
             BROADCAST_STATE.pop(admin_id, None)
 
-        # NEW: Handle Specific Groups click
         elif target == "specific_groups":
             state["step"] = "waiting_for_group_ids"
             await query.message.edit_text(
@@ -248,7 +246,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_target_menu(update.message)
             return
 
-        # --- Specific USERS input ---
         if state["step"] == "waiting_for_ids":
             text = update.message.text.replace(" ", "")
             try:
@@ -262,11 +259,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             BROADCAST_STATE.pop(admin_id, None)
             return
 
-        # --- Specific GROUPS input (NEW) ---
         if state["step"] == "waiting_for_group_ids":
             text = update.message.text.replace(" ", "")
             try:
-                # Group IDs are negative numbers (e.g. -100123456)
                 ids = [int(i.strip()) for i in text.split(",") if i.strip()]
                 if not ids: raise ValueError
             except ValueError:
@@ -293,7 +288,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ Failed to save OTP.")
 
 # ==========================================================
-# BROADCAST EXECUTION ENGINE
+# BROADCAST EXECUTION ENGINE (UPDATED FOR TIMEOUTS)
 # ==========================================================
 async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, context, reply_markup=None):
     success = 0
@@ -303,19 +298,28 @@ async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, 
 
     for index, chat_id in enumerate(chat_ids, 1):
         try:
+            # Copy the message
             await broadcast_msg.copy(chat_id=chat_id, reply_markup=reply_markup)
             success += 1
         except Exception as e:
             print(f"Failed to send to {chat_id}: {e}")
             failed += 1
         
+        # Update progress every 10 sends safely inside a try/except
         if index % 10 == 0 or index == len(chat_ids):
             try:
                 await status_msg.edit_text(f"⏳ Progress: {index}/{len(chat_ids)}\n✅ Success: {success} | ❌ Failed: {failed}")
-            except: pass
-        await asyncio.sleep(0.05)
+            except Exception:
+                pass # If updating the progress bar times out, we ignore it and keep broadcasting
+                
+        # INCREASED SLEEP DELAY: 0.1 seconds (10 messages per second)
+        # This is much safer and prevents Telegram timeouts
+        await asyncio.sleep(0.1)
 
-    await status_msg.edit_text(f"🏁 <b>Broadcast Finished!</b>\n\n🎯 Target: {target_name}\n✅ Success: {success}\n❌ Failed: {failed}", parse_mode="HTML")
+    try:
+        await status_msg.edit_text(f"🏁 <b>Broadcast Finished!</b>\n\n🎯 Target: {target_name}\n✅ Success: {success}\n❌ Failed: {failed}", parse_mode="HTML")
+    except Exception:
+        pass
 
 # ==========================================================
 # STATUS COMMAND
@@ -379,10 +383,19 @@ async def show_user_detail(chat_id, telegram_id, context: ContextTypes.DEFAULT_T
         await context.bot.send_message(chat_id=chat_id, text=chunk, parse_mode="HTML")
 
 # ==========================================================
-# MAIN
+# MAIN (UPDATED TIMEOUT SETTINGS)
 # ==========================================================
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    # Increased timeouts to 30 seconds to prevent TimedOut errors on Railway
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .connect_timeout(30.0)
+        .read_timeout(30.0)
+        .write_timeout(30.0)
+        .pool_timeout(30.0)
+        .build()
+    )
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_cmd))
