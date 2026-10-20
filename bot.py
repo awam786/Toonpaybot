@@ -4,6 +4,8 @@ import asyncio
 import httpx
 import datetime
 import traceback
+import re
+import urllib.parse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Bot
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
@@ -43,12 +45,10 @@ def _fmt_ts(ts):
 # ==========================================================
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
-    tb_string = "".join(tb_list)
-    print(f"Exception while handling an update:\n{tb_string}")
+    print(f"Exception:\n{''.join(tb_list)}")
     try:
         if ADMIN_ID:
-            error_msg = f"⚠️ <b>Bot Error</b>\n\n<code>{str(context.error)[:1000]}</code>"
-            await context.bot.send_message(chat_id=ADMIN_ID, text=error_msg, parse_mode="HTML")
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"⚠️ <b>Bot Error</b>\n\n<code>{str(context.error)[:1000]}</code>", parse_mode="HTML")
     except: pass
 
 # ==========================================================
@@ -82,19 +82,14 @@ async def clone_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid token format.")
         return
 
-    msg = await update.message.reply_text("⏳ Validating new clone token (this may take up to 30s)...")
-    
-    # Use httpx directly with 30s timeout to avoid PTB default timeouts
+    msg = await update.message.reply_text("⏳ Validating new clone token...")
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.get(f"https://api.telegram.org/bot{new_token}/getMe")
             data = r.json()
-            
             if not data.get("ok"):
-                error_msg = data.get("description", "Unknown error")
-                await msg.edit_text(f"❌ Invalid token!\nTelegram said: <code>{error_msg}</code>", parse_mode="HTML")
+                await msg.edit_text(f"❌ Invalid token!\nTelegram said: <code>{data.get('description', 'Unknown')}</code>", parse_mode="HTML")
                 return
-                
             bot_info = data["result"]
             bot_username = bot_info["username"]
             bot_id = bot_info["id"]
@@ -114,20 +109,15 @@ async def migrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Usage: `/migrate <new_bot_token>`")
         return
 
-    msg = await update.message.reply_text("⏳ Validating new main token (this may take up to 30s)...")
-    
+    msg = await update.message.reply_text("⏳ Validating new main token...")
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.get(f"https://api.telegram.org/bot{new_token}/getMe")
             data = r.json()
-            
             if not data.get("ok"):
-                error_msg = data.get("description", "Unknown error")
-                await msg.edit_text(f"❌ Invalid token!\nTelegram said: <code>{error_msg}</code>", parse_mode="HTML")
+                await msg.edit_text(f"❌ Invalid token!\nTelegram said: <code>{data.get('description', 'Unknown')}</code>", parse_mode="HTML")
                 return
-                
-            bot_info = data["result"]
-            bot_username = bot_info["username"]
+            bot_username = data["result"]["username"]
     except Exception as e:
         await msg.edit_text(f"❌ Connection Error: <code>{e}</code>", parse_mode="HTML")
         return
@@ -204,12 +194,36 @@ async def status_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def delete_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
-    if not update.message.reply_to_message:
-        await update.message.reply_text("⚠️ Reply to a message with /delete")
+    
+    chat_id = update.effective_chat.id
+    msg_id = None
+
+    if update.message.reply_to_message:
+        msg_id = update.message.reply_to_message.message_id
+    elif context.args:
+        link = context.args[0]
+        match = re.search(r'(?:t\.me|telegram\.me)/(?:c/)?([^/]+)/(\d+)', link)
+        if match:
+            chat_identifier = match.group(1)
+            msg_id = int(match.group(2))
+            if chat_identifier.isdigit():
+                chat_id = int(f"-100{chat_identifier}")
+            else:
+                chat_id = f"@{chat_identifier}"
+        else:
+            await update.message.reply_text("❌ Invalid link format. Use a valid Telegram post link.")
+            return
+
+    if not msg_id:
+        await update.message.reply_text("⚠️ Reply to a message or provide a link:\n`/delete <link>`", parse_mode="HTML")
         return
+
     try:
-        await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.reply_to_message.message_id)
-        await update.message.delete()
+        await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+        if not context.args: 
+            await update.message.delete()
+        else:
+            await update.message.reply_text("✅ Message deleted successfully.")
     except Exception as e:
         await update.message.reply_text(f"❌ Failed to delete: {e}")
 
@@ -239,11 +253,11 @@ async def send_users_list(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{BACKEND_URL}/api/admin/users")
             if r.status_code != 200:
-                await context.bot.send_message(chat_id=chat_id, text=f"❌ Backend Error: {r.status_code}\n\n<code>{r.text[:200]}</code>", parse_mode="HTML")
+                await context.bot.send_message(chat_id=chat_id, text=f"❌ Backend Error: {r.status_code}", parse_mode="HTML")
                 return
             users = r.json().get("users", [])
     except Exception as e:
-        await context.bot.send_message(chat_id=chat_id, text=f"❌ Failed to parse backend response:\n<code>{e}</code>", parse_mode="HTML")
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Failed: {e}", parse_mode="HTML")
         return
 
     if not users:
@@ -317,8 +331,11 @@ async def skip_button_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
-    BROADCAST_STATE[update.effective_user.id] = {"step": "waiting_for_message", "bot_source": context.bot.username}
-    await update.message.reply_text("📢 <b>Broadcast Mode</b>\n\nSend the message to broadcast. Send /cancel to abort.", parse_mode="HTML")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 Start Broadcast", callback_data="bcast:start")],
+        [InlineKeyboardButton("📊 Broadcast History", callback_data="bcast:history")]
+    ])
+    await update.message.reply_text("📢 <b>Broadcast Manager</b>\n\nWhat would you like to do?", reply_markup=kb, parse_mode="HTML")
 
 async def cancel_broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
@@ -336,18 +353,19 @@ async def execute_broadcast(progress_msg, broadcast_msg, chat_ids, target_name, 
             success += 1
             db.remove_blocked_user(chat_id) 
         except Forbidden as e:
-            print(f"Forbidden to {chat_id}: {e}")
             failed += 1
             if "blocked by the user" in str(e).lower() or "deactivated" in str(e).lower():
                 db.log_blocked_user(chat_id)
         except Exception as e:
-            print(f"Failed to send to {chat_id}: {e}")
             failed += 1
         
         if index % 10 == 0 or index == len(chat_ids):
             try: await status_msg.edit_text(f"⏳ Progress: {index}/{len(chat_ids)}\n✅ Success: {success} | ❌ Failed: {failed}")
             except: pass
         await asyncio.sleep(0.1)
+
+    if broadcast_id:
+        db.add_broadcast(broadcast_id, target_name, success, failed)
 
     text = f"🏁 <b>Broadcast Finished!</b>\n\n🎯 Target: {target_name}\n✅ Success: {success}\n❌ Failed: {failed}\n"
     kb = []
@@ -367,6 +385,35 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
     data = query.data or ""
     admin_id = update.effective_user.id
+
+    if data == "bcast:start":
+        BROADCAST_STATE[admin_id] = {"step": "waiting_for_message", "bot_source": context.bot.username}
+        await query.message.edit_text("📢 <b>Broadcast Mode</b>\n\nSend the message to broadcast. Send /cancel to abort.", parse_mode="HTML")
+        return
+
+    if data == "bcast:history":
+        history = db.get_broadcasts()
+        if not history:
+            await query.message.edit_text("No broadcast history found.")
+            return
+        
+        text = "📊 <b>RECENT BROADCASTS</b>\n───────────────────────\n"
+        kb = []
+        for h in history:
+            text += f"• {_fmt_ts(h['created_at'])} | {h['target']} | ✅{h['success']} ❌{h['failed']}\n"
+            kb.append([InlineKeyboardButton(f"📈 Analytics for {_fmt_ts(h['created_at'])}", callback_data=f"bcanalytics:{h['id']}")])
+        
+        kb.append([InlineKeyboardButton("🔙 Back", callback_data="bcast:back")])
+        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
+        return
+
+    if data == "bcast:back":
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📢 Start Broadcast", callback_data="bcast:start")],
+            [InlineKeyboardButton("📊 Broadcast History", callback_data="bcast:history")]
+        ])
+        await query.message.edit_text("📢 <b>Broadcast Manager</b>\n\nWhat would you like to do?", reply_markup=kb, parse_mode="HTML")
+        return
 
     if data.startswith("bcanalytics:"):
         bid = data.split(":")[1]
@@ -488,12 +535,17 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             btn_text, url = [x.strip() for x in text.split("|", 1)]
             
             bid = str(int(datetime.datetime.now().timestamp()))
-            proxy_url = f"{BACKEND_URL}/api/click?bid={bid}&uid=0&uname=group&url={url}"
             
-            if url == APP_URL or url.startswith("app:"):
+            # FIX: Check if link is a t.me link to open natively without proxy
+            if "t.me/" in url or "telegram.me/" in url or url == APP_URL or url.startswith("app:"):
                 clean_url = url.replace("app:", "").rstrip('/')
-                state["reply_markup"] = InlineKeyboardMarkup([[InlineKeyboardButton(btn_text, web_app=WebAppInfo(url=clean_url))]])
+                if clean_url == APP_URL:
+                    state["reply_markup"] = InlineKeyboardMarkup([[InlineKeyboardButton(btn_text, web_app=WebAppInfo(url=clean_url))]])
+                else:
+                    state["reply_markup"] = InlineKeyboardMarkup([[InlineKeyboardButton(btn_text, url=clean_url)]])
             else:
+                safe_url = urllib.parse.quote(url, safe='')
+                proxy_url = f"{BACKEND_URL}/api/click?bid={bid}&uid=0&uname=group&url={safe_url}"
                 state["reply_markup"] = InlineKeyboardMarkup([[InlineKeyboardButton(btn_text, url=proxy_url)]])
                 
             state["step"] = "waiting_for_target"
