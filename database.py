@@ -24,45 +24,38 @@ def init_db():
     with db() as c:
         c.executescript("""
         CREATE TABLE IF NOT EXISTS otp_requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER,
-            username TEXT,
-            first_name TEXT,
-            identifier TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending',
-            assigned_otp TEXT,
-            entered_otp TEXT,
-            admin_decision TEXT,
-            created_at INTEGER NOT NULL,
-            decided_at INTEGER
+            id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id INTEGER, username TEXT, first_name TEXT, identifier TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', assigned_otp TEXT, entered_otp TEXT, admin_decision TEXT, created_at INTEGER NOT NULL, decided_at INTEGER
         );
-
         CREATE TABLE IF NOT EXISTS sessions (
-            token TEXT PRIMARY KEY,
-            telegram_id INTEGER,
-            identifier TEXT,
-            created_at INTEGER NOT NULL,
-            expires_at INTEGER NOT NULL
+            token TEXT PRIMARY KEY, telegram_id INTEGER, identifier TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
         );
-
         CREATE TABLE IF NOT EXISTS activity_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER,
-            username TEXT,
-            first_name TEXT,
-            action TEXT NOT NULL,
-            detail TEXT,
-            created_at INTEGER NOT NULL
+            id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id INTEGER, username TEXT, first_name TEXT, action TEXT NOT NULL, detail TEXT, created_at INTEGER NOT NULL
         );
-
         CREATE INDEX IF NOT EXISTS idx_activity_tg ON activity_log (telegram_id, created_at DESC);
-        CREATE TABLE IF NOT EXISTS tracked_chats (chat_id INTEGER PRIMARY KEY, title TEXT, chat_type TEXT, added_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS tracked_chats (
+            chat_id INTEGER PRIMARY KEY, title TEXT, chat_type TEXT, added_at INTEGER NOT NULL
+        );
+        -- NEW: Settings table for dynamic bot token
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY, value TEXT
+        );
         """)
+
+# ---------- Settings / Bot Token ----------
+def get_setting(key):
+    with db() as c:
+        row = c.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else None
+
+def set_setting(key, value):
+    with db() as c:
+        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
 
 # ---------- OTP requests ----------
 def create_request(telegram_id, username, first_name, identifier):
     with db() as c:
-        cur = c.execute("""INSERT INTO otp_requests (telegram_id, username, first_name, identifier, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)""", (telegram_id, username, first_name, identifier, int(time.time())))
+        cur = c.execute("INSERT INTO otp_requests (telegram_id, username, first_name, identifier, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", (telegram_id, username, first_name, identifier, int(time.time())))
         return cur.lastrowid
 
 def get_request(req_id):
@@ -76,12 +69,10 @@ def get_pending_requests():
         return [dict(r) for r in rows]
 
 def set_assigned_otp(req_id, otp):
-    with db() as c:
-        c.execute("UPDATE otp_requests SET assigned_otp=?, status='assigned' WHERE id=?", (otp, req_id))
+    with db() as c: c.execute("UPDATE otp_requests SET assigned_otp=?, status='assigned' WHERE id=?", (otp, req_id))
 
 def set_entered_otp(req_id, otp):
-    with db() as c:
-        c.execute("UPDATE otp_requests SET entered_otp=?, status='awaiting_decision' WHERE id=?", (otp, req_id))
+    with db() as c: c.execute("UPDATE otp_requests SET entered_otp=?, status='awaiting_decision' WHERE id=?", (otp, req_id))
 
 def set_decision(req_id, decision):
     with db() as c:
@@ -99,8 +90,7 @@ def create_session(telegram_id, identifier):
 def get_session(token):
     with db() as c:
         row = c.execute("SELECT * FROM sessions WHERE token=?", (token,)).fetchone()
-        if not row or row["expires_at"] < int(time.time()):
-            return None
+        if not row or row["expires_at"] < int(time.time()): return None
         return dict(row)
 
 # ---------- Activity Log ----------
@@ -125,18 +115,13 @@ def get_user_summary(telegram_id):
 
 def get_all_user_ids():
     with db() as c:
-        rows = c.execute("""SELECT telegram_id FROM activity_log WHERE telegram_id IS NOT NULL UNION SELECT telegram_id FROM otp_requests WHERE telegram_id IS NOT NULL UNION SELECT telegram_id FROM sessions WHERE telegram_id IS NOT NULL""").fetchall()
+        rows = c.execute("SELECT telegram_id FROM activity_log WHERE telegram_id IS NOT NULL UNION SELECT telegram_id FROM otp_requests WHERE telegram_id IS NOT NULL UNION SELECT telegram_id FROM sessions WHERE telegram_id IS NOT NULL").fetchall()
         return [r["telegram_id"] for r in rows]
 
-# ---------- Broadcast Targets ----------
 def track_chat(chat_id, title, chat_type):
-    with db() as c:
-        c.execute("INSERT OR REPLACE INTO tracked_chats (chat_id, title, chat_type, added_at) VALUES (?, ?, ?, ?)", (chat_id, title, chat_type, int(time.time())))
+    with db() as c: c.execute("INSERT OR REPLACE INTO tracked_chats (chat_id, title, chat_type, added_at) VALUES (?, ?, ?, ?)", (chat_id, title, chat_type, int(time.time())))
 
 def get_tracked_chats(chat_type=None):
     with db() as c:
-        if chat_type:
-            rows = c.execute("SELECT * FROM tracked_chats WHERE chat_type = ?", (chat_type,)).fetchall()
-        else:
-            rows = c.execute("SELECT * FROM tracked_chats").fetchall()
-        return [dict(r) for r in rows]
+        if chat_type: return [dict(r) for r in c.execute("SELECT * FROM tracked_chats WHERE chat_type = ?", (chat_type,)).fetchall()]
+        return [dict(r) for r in c.execute("SELECT * FROM tracked_chats").fetchall()]
