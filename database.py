@@ -7,8 +7,10 @@ from contextlib import contextmanager
 DB_PATH = os.getenv("DATABASE_PATH", "toonpay.db")
 
 def _conn():
-    c = sqlite3.connect(DB_PATH, check_same_thread=False)
+    # Timeout 30s & WAL mode fixes the "Database is locked" 500 error
+    c = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
     c.row_factory = sqlite3.Row
+    c.execute("PRAGMA journal_mode=WAL;")
     return c
 
 @contextmanager
@@ -48,9 +50,8 @@ def init_db():
         try:
             c.execute("ALTER TABLE activity_log ADD COLUMN bot_source TEXT")
         except sqlite3.OperationalError:
-            pass # Column already exists
+            pass 
             
-        # Ensure activity_log table exists
         c.execute("""
         CREATE TABLE IF NOT EXISTS activity_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT, telegram_id INTEGER, username TEXT, first_name TEXT, action TEXT NOT NULL, detail TEXT, bot_source TEXT, created_at INTEGER NOT NULL
@@ -134,6 +135,14 @@ def get_user_summary(telegram_id):
 def get_user_activity(telegram_id, limit=30):
     with db() as c:
         return [dict(r) for r in c.execute("SELECT * FROM activity_log WHERE telegram_id = ? ORDER BY created_at DESC LIMIT ?", (telegram_id, limit)).fetchall()]
+
+def get_all_users():
+    with db() as c:
+        rows = c.execute("""
+            SELECT telegram_id, MAX(username) AS username, MAX(first_name) AS first_name, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen, COUNT(*) AS total_actions
+            FROM activity_log WHERE telegram_id IS NOT NULL GROUP BY telegram_id ORDER BY last_seen DESC LIMIT 50
+        """).fetchall()
+        return [dict(r) for r in rows]
 
 # ---------- Groups & OTPs ----------
 def track_chat(chat_id, title, chat_type, bot_source):
