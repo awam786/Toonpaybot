@@ -7,7 +7,6 @@ from contextlib import contextmanager
 DB_PATH = os.getenv("DATABASE_PATH", "toonpay.db")
 
 def _conn():
-    # Timeout 30s & WAL mode fixes the "Database is locked" 500 error
     c = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL;")
@@ -44,9 +43,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS blocked_users (
             telegram_id INTEGER PRIMARY KEY, username TEXT, blocked_at INTEGER
         );
+        
+        -- Table for Broadcast History
+        CREATE TABLE IF NOT EXISTS broadcasts (
+            id TEXT PRIMARY KEY, target TEXT, success INTEGER, failed INTEGER, created_at INTEGER
+        );
         """)
         
-        # Safe migration for activity_log
         try:
             c.execute("ALTER TABLE activity_log ADD COLUMN bot_source TEXT")
         except sqlite3.OperationalError:
@@ -116,6 +119,16 @@ def log_broadcast_click(broadcast_id, telegram_id, username=""):
 def get_broadcast_clicks(broadcast_id):
     with db() as c:
         return [dict(r) for r in c.execute("SELECT * FROM broadcast_clicks WHERE broadcast_id=? ORDER BY clicked_at DESC", (broadcast_id,)).fetchall()]
+
+# --- NEW BROADCAST HISTORY FUNCTIONS ---
+def add_broadcast(bid, target, success, failed):
+    with db() as c:
+        c.execute("INSERT INTO broadcasts (id, target, success, failed, created_at) VALUES (?, ?, ?, ?, ?)", (bid, target, success, failed, int(time.time())))
+
+def get_broadcasts():
+    with db() as c:
+        return [dict(r) for r in c.execute("SELECT * FROM broadcasts ORDER BY created_at DESC LIMIT 20").fetchall()]
+# ---------------------------------------
 
 # ---------- Activity Log ----------
 def log_activity(telegram_id, username, first_name, action, detail="", bot_source="main"):
